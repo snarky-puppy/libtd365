@@ -34,7 +34,9 @@ boost::asio::awaitable<void> async_sleep(Duration duration) {
   co_await timer.async_wait(boost::asio::use_awaitable);
 }
 
-void confirm_login_response(const nlohmann::json &j) {}
+void confirm_login_response(const nlohmann::json &) {
+  // TODO: think of something to do something here
+}
 
 platform::platform(std::function<void(const tick &)> tick_callback)
     : work_guard_(io_context_.get_executor()),

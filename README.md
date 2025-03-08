@@ -8,8 +8,8 @@ This library provides a modern C++ interface to access TD365 trading platform fe
 
 - Authentication via OAuth
 - Real-time WebSocket data streaming
-- Order management
-- Position tracking
+- ~~Order management~~ TODO
+- ~~Position tracking~~ TODO
 - Market data access
 
 ## Requirements
@@ -18,7 +18,7 @@ This library provides a modern C++ interface to access TD365 trading platform fe
 - Boost 1.83+
 - OpenSSL
 - nlohmann_json
-- zstd
+- zlib
 
 ## Building
 
@@ -30,29 +30,7 @@ make
 
 ## Usage Example
 
-```cpp
-#include "td365.h"
-#include <iostream>
-
-int main() {
-    td365 client;
-    
-    // Connect to the platform
-    client.connect("username", "password", "account_id");
-    
-    // Subscribe to market updates
-    client.subscribe_to_prices({"EUR/USD", "GBP/USD"});
-    
-    // Get account information
-    auto account = client.get_account_info();
-    std::cout << "Account balance: " << account.balance << std::endl;
-    
-    // Place an order
-    client.place_order("EUR/USD", td365::ORDER_BUY, 1.0, 1000);
-    
-    return 0;
-}
-```
+Please see the `examples` directory
 
 ## API Documentation
 
@@ -60,7 +38,7 @@ See the header files in the `src` directory for detailed API documentation.
 
 ## License
 
-MIT
+The Prosperity Public License 3.0.0
 
 ## Disclaimer
 
