@@ -119,12 +119,23 @@ tick parse_tick(const std::string &price_string, grouping price_type) {
 
 // Stream output operator for tick objects
 std::ostream &operator<<(std::ostream &os, const tick &t) {
+  auto tp = t.timestamp;
+  auto tp_conv =
+      std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
+  std::time_t time = std::chrono::system_clock::to_time_t(tp_conv);
+
+  // Get milliseconds component
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                tp.time_since_epoch()) %
+            1000;
+
   os << "Tick { "
      << "quote_id: " << t.quote_id << ", bid: " << t.bid << ", ask: " << t.ask
      << ", spread: " << (t.ask - t.bid) << ", change: " << t.daily_change
      << ", dir: " << to_string(t.dir) << ", high: " << t.high
      << ", low: " << t.low << ", mid: " << t.mid_price
-     << ", time: " << t.timestamp
+     << ", time: " << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S")
+     << '.' << std::setw(3) << std::setfill('0') << ms.count()
      << ", latency: " << (t.latency.count() / 1000000.0) << "ms"
      << ", type: " << to_string(t.grouping) << " }";
   return os;

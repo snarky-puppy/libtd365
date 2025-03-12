@@ -16,6 +16,7 @@
 #include <boost/beast/websocket/ssl.hpp>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <print>
 #include <ranges>
 
 namespace net = boost::asio;

@@ -13,6 +13,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <charconv>
 #include <iostream>
+#include <ranges>
 #include <regex>
 
 using json = nlohmann::json;
