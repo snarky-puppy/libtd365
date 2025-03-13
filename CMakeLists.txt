@@ -8,9 +8,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # https://releases.llvm.org/4.0.0/tools/clang/docs/DiagnosticsReference.html#wall
 add_compile_options(-Wall -Wextra -Wpedantic -fno-omit-frame-pointer)
 
-# force llvm on linux to use the bundled std library
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=c++23")
-
 file(GLOB_RECURSE SOURCES src/*.cpp)
 add_library(td365 SHARED ${SOURCES})
 

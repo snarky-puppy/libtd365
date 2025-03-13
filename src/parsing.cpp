@@ -9,7 +9,6 @@
 #include "td365.h"
 
 #include <cassert>
-#include <format>
 #include <iomanip>
 #include <iostream>
 #include <sstream>

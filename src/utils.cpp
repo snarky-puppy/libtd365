@@ -27,25 +27,29 @@ std::string now_utc() {
   return boost::posix_time::to_iso_string(now);
 }
 
+std::pair<std::string, std::string>
+td_resolve_host_port(const std::string &host, const std::string &port) {
+  if (auto *env = std::getenv("PROXY")) {
+    std::string_view proxy{env};
+    auto pos = proxy.find(':');
+    if (pos != std::string_view::npos) {
+      return std::make_pair(std::string(
+        proxy.substr(0, pos)),
+        std::string(proxy.substr(pos+1)));
+    } else {
+      return std::make_pair(std::string(proxy), "8080");
+    }
+  }
+  return std::make_pair(host, port);
+}
+
 boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
 td_resolve(const boost::asio::any_io_executor &executor,
            const std::string &host, const std::string &port) {
-  auto resolved_host = std::string_view{host};
-  auto resolved_port = std::string_view{port};
-  if (auto *env = std::getenv("PROXY")) {
-    std::string_view proxy{env};
-    auto r = proxy | std::ranges::views::split(':');
-    auto iter = r.begin();
-    resolved_host = std::string_view(*iter);
-    iter++;
-    resolved_port = std::string_view{"8080"};
-    if (iter != r.end()) {
-      resolved_port = std::string_view(*iter);
-    }
-  }
+  auto [rhost, rport] = td_resolve_host_port(host, port);
   boost::asio::ip::tcp::resolver resolver(executor);
-  auto endpoints = co_await resolver.async_resolve(resolved_host, resolved_port,
-                                                   boost::asio::use_awaitable);
+  auto endpoints = co_await resolver.async_resolve(rhost, rport,
+                                                    boost::asio::use_awaitable);
   co_return endpoints;
 }
 
@@ -55,16 +59,11 @@ json extract_jwt_payload(const json &jwt) {
   }
 
   // https://en.cppreference.com/w/cpp/ranges
-  auto jwt_range = to_string(jwt) | std::ranges::views::split('.') |
-                   std::ranges::views::drop(1) | std::ranges::views::take(1);
-
-  auto it = jwt_range.begin();
-  if (it == jwt_range.end()) {
-    throw std::runtime_error(jwt.dump());
-  }
-
-  // nholmann does not support string_views yet
-  std::string payload((*it).begin(), (*it).end());
+  auto jwts = to_string(jwt);
+  const static std::regex re(R"(^[^\.]+\.([^\.]+).*$)");
+  std::smatch m;
+  assert(std::regex_match(jwts, m, re));
+  auto payload = m[1].str();
 
   while ((payload.size() & 3) != 0) {
     payload.push_back('=');
