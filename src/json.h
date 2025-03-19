@@ -15,5 +15,7 @@ void to_json(nlohmann::json &j, const market_group &mg);
 void from_json(const nlohmann::json &j, market_group &mg);
 void to_json(nlohmann::json &j, const market &m);
 void from_json(const nlohmann::json &j, market &m);
+void to_json(nlohmann::json &j, const tick &m);
+void from_json(const nlohmann::json &j, tick &m);
 
 #endif // JSON_H

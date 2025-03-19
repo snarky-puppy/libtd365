@@ -4,6 +4,8 @@ project(td365)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+
 # clang has no documentation installed on MacOS
 # https://releases.llvm.org/4.0.0/tools/clang/docs/DiagnosticsReference.html#wall
 add_compile_options(-Wall -Wextra -Wpedantic -fno-omit-frame-pointer)

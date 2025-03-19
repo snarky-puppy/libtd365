@@ -66,9 +66,9 @@ struct market {
 };
 
 // Enum for price data types
-enum class grouping { grouped, sampled, delayed, candle_1m };
+enum class grouping { grouped, sampled, delayed, candle_1m, _count };
 
-enum class direction { up, down, unchanged };
+enum class direction { up, down, unchanged, _count };
 
 struct tick {
   int quote_id;
@@ -76,16 +76,16 @@ struct tick {
   double ask;
   double daily_change;
   direction dir;
-  int field6; // Unknown field
+  bool tradable;
   double high;
   double low;
   std::string hash; // Base64 encoded hash
-  int field10;      // Unknown field
+  bool call_only;
   double mid_price;
   std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>
       timestamp;
   int field13; // Unknown field
-  grouping grouping;
+  grouping group;
   std::chrono::nanoseconds latency{}; // difference between received timestamp
                                       // and timestamp sent by server
 };

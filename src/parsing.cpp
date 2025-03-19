@@ -16,31 +16,36 @@
 #include <unordered_map>
 #include <vector>
 
+static const std::array<std::string, static_cast<size_t>(grouping::_count)> grouping_lookup = {
+  "Grouped",
+  "Sampled",
+  "Delayed",
+  "Candle1Minute"};
+
+static const std::array<std::string, static_cast<size_t>(direction::_count)> direction_lookup = {
+"up",
+ "down",
+ "unchanged",
+};
+
 // Convert direction enum to string for output
 std::string_view to_string(direction dir) {
-  switch (dir) {
-  case direction::up:
-    return "up";
-  case direction::down:
-    return "down";
-  case direction::unchanged:
-    return "unchanged";
-  default:
-    return "unknown";
-  }
+  return to_cstring(dir);
+}
+
+const std::string& to_cstring(direction dir) {
+  return direction_lookup[static_cast<size_t>(dir)];
 }
 
 // Convert price_type enum to string for output
 std::string_view to_string(grouping pt) {
-  static const std::unordered_map<grouping, std::string_view> lookup = {
-      {grouping::grouped, "Grouped"},
-      {grouping::sampled, "Sampled"},
-      {grouping::delayed, "Delayed"},
-      {grouping::candle_1m, "Candle1Minute"}};
-
-  auto it = lookup.find(pt);
-  return (it != lookup.end()) ? it->second : "Unknown";
+  return to_cstring(pt);
 }
+
+const std::string& to_cstring(grouping pt) {
+  return grouping_lookup[static_cast<size_t>(pt)];
+}
+
 
 // String to price_type conversion helper
 grouping string_to_price_type(std::string_view key) {
@@ -102,15 +107,15 @@ tick parse_tick(const std::string &price_string, grouping price_type) {
               .ask = std::stod(fields[2]),
               .daily_change = std::stod(fields[3]),
               .dir = dir_value,
-              .field6 = std::stoi(fields[5]),
+              .tradable = fields[5] == "1",
               .high = std::stod(fields[6]),
               .low = std::stod(fields[7]),
               .hash = fields[8],
-              .field10 = std::stoi(fields[9]),
+              .call_only = fields[9] == "1",
               .mid_price = std::stod(fields[10]),
               .timestamp = timestamp_value,
               .field13 = std::stoi(fields[12]),
-              .grouping = price_type,
+              .group = price_type,
               .latency = latency_value};
 
   return result;
@@ -133,10 +138,14 @@ std::ostream &operator<<(std::ostream &os, const tick &t) {
      << ", spread: " << (t.ask - t.bid) << ", change: " << t.daily_change
      << ", dir: " << to_string(t.dir) << ", high: " << t.high
      << ", low: " << t.low << ", mid: " << t.mid_price
+  << ", tradable: " << t.tradable
+  << ", call_only: " << t.call_only
+  << ", field13: " << t.field13
+
      << ", time: " << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S")
      << '.' << std::setw(3) << std::setfill('0') << ms.count()
      << ", latency: " << (t.latency.count() / 1000000.0) << "ms"
-     << ", type: " << to_string(t.grouping) << " }";
+     << ", type: " << to_string(t.group) << " }";
   return os;
 }
 

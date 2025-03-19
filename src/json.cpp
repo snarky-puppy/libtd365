@@ -111,3 +111,44 @@ void from_json(const nlohmann::json &j, market &m) {
   j.at("Subscription").get_to(m.subscription);
   j.at("SuperGroupID").get_to(m.super_group_id);
 }
+
+void to_json(nlohmann::json &j, const tick &m) {
+  j = nlohmann::json{
+        {"quote_id", m.quote_id},
+        {"bid", m.bid},
+        {"ask", m.ask},
+        {"daily_change", m.daily_change},
+        {"dir", m.dir},
+        {"tradable", m.tradable},
+        {"high", m.high},
+        {"low", m.low},
+        {"hash", m.hash},
+        {"call_only", m.call_only},
+        {"mid_price", m.mid_price},
+        {"timestamp", m.timestamp.time_since_epoch().count()},
+        {"field13", m.field13},
+        {"group", m.group},
+        {"latency", m.latency.count()}
+  };
+}
+
+void from_json(const nlohmann::json &j, tick &m) {
+  j.at("quote_id").get_to(m.quote_id);
+  j.at("bid").get_to(m.bid);
+  j.at("ask").get_to(m.ask);
+  j.at("daily_change").get_to(m.daily_change);
+  j.at("dir").get_to(m.dir);
+  j.at("tradable").get_to(m.tradable);
+  j.at("high").get_to(m.high);
+  j.at("low").get_to(m.low);
+  j.at("hash").get_to(m.hash);
+  j.at("call_only").get_to(m.call_only);
+  j.at("mid_price").get_to(m.mid_price);
+  auto ts_count = j.at("timestamp").get<long long>();
+  m.timestamp = std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>(
+      std::chrono::nanoseconds(ts_count));
+  j.at("field13").get_to(m.field13);
+  j.at("group").get_to(m.group);
+  auto latency_count = j.at("latency").get<long long>();
+  m.latency = std::chrono::nanoseconds(latency_count);
+}
