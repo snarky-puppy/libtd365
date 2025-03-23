@@ -105,7 +105,7 @@ public:
   void connect(const std::string &username, const std::string &password,
                const std::string &account_id);
 
-  void connect_demo() const;
+  void connect() const;
 
   std::vector<market_group> get_market_super_group() const;
 

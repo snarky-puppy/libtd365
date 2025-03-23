@@ -37,7 +37,7 @@ platform::~platform() {
   }
 }
 
-void platform::connect_demo() {
+void platform::connect() {
   connect(authenticator::authenticate());
 }
 

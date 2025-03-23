@@ -33,7 +33,7 @@ public:
 
     void connect(account_detail auth_detail);
 
-    void connect_demo();
+    void connect();
 
     void shutdown();
 

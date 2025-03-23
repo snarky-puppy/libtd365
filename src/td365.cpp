@@ -20,8 +20,8 @@ void td365::connect(const std::string &username, const std::string &password,
   platform_->connect(username, password, account_id);
 }
 
-void td365::connect_demo() const {
-  platform_->connect_demo();
+void td365::connect() const {
+  platform_->connect();
 }
 
 
