@@ -9,8 +9,7 @@
 #include "platform.h"
 #include <iostream>
 
-td365::td365(tick_callback callback)
-  : platform_(std::make_unique<platform>(std::move(callback))) {
+td365::td365(): platform_(std::make_unique<platform>()) {
 }
 
 // Define destructor here to ensure complete definition of platform is available
@@ -40,4 +39,4 @@ std::vector<market> td365::get_market_quote(int id) const {
 
 void td365::subscribe(int quote_id) const { platform_->subscribe(quote_id); }
 
-void td365::wait_for_disconnect() const { platform_->wait_for_disconnect(); }
+void td365::main_loop(tick_callback callback) const { platform_->main_loop(callback); }

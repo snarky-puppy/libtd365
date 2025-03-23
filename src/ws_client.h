@@ -17,6 +17,7 @@
 #include <future>
 #include <nlohmann/json_fwd.hpp>
 #include <string>
+#include <thread>
 #include <vector>
 
 enum class grouping;
@@ -25,7 +26,6 @@ class portal;
 class ws_client {
 public:
     explicit ws_client(
-        const boost::asio::any_io_executor &executor,
         const std::atomic<bool> &shutdown,
         std::function<void(const tick &)> &&tick_callback = nullptr);
 
@@ -38,6 +38,11 @@ public:
     boost::asio::awaitable<void> send(const nlohmann::json &);
 
     boost::asio::awaitable<void> close();
+    
+    // Synchronous methods for platform
+    void close_sync();
+    void subscribe_sync(int quote_id);
+    void unsubscribe_sync(int quote_id);
 
     boost::asio::awaitable<void> subscribe(int quote_id);
 
@@ -51,6 +56,11 @@ public:
     boost::asio::awaitable<void> reconnect();
 
 private:
+    template<typename Awaitable>
+    auto run_awaitable(Awaitable awaitable) -> typename Awaitable::value_type;
+
+    auto run_awaitable(boost::asio::awaitable<void>) -> void;
+
     void process_subscribe_response(const nlohmann::json &msg);
 
     boost::asio::awaitable<::boost::beast::error_code> process_messages(const std::string &login_id,
@@ -72,7 +82,10 @@ private:
 
     void process_price_data(const nlohmann::json &msg);
 
-    boost::asio::any_io_executor executor_;
+    boost::asio::io_context io_context_;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
+    std::thread io_thread_;
+    
     std::unique_ptr<ws> ws_;
     const std::atomic<bool> &shutdown_;
     std::string supported_version_ = "1.0.0.6";

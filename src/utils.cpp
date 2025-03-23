@@ -53,6 +53,14 @@ td_resolve(const boost::asio::any_io_executor &executor,
   co_return endpoints;
 }
 
+boost::asio::ip::tcp::resolver::results_type
+td_resolve_sync(boost::asio::io_context &io_context,
+                const std::string &host, const std::string &port) {
+  auto [rhost, rport] = td_resolve_host_port(host, port);
+  boost::asio::ip::tcp::resolver resolver(io_context);
+  return resolver.resolve(rhost, rport);
+}
+
 json extract_jwt_payload(const json &jwt) {
   if (!jwt.is_string()) {
     throw std::runtime_error(jwt.dump());

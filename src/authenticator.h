@@ -9,32 +9,24 @@
 #define AUTHENTICATOR_H
 
 #include "utils.h"
-#include <boost/asio/awaitable.hpp>
 #include <string>
 
 typedef enum { demo, prod } account_type_t;
 
 struct account_detail {
-  splitted_url platform_url;
-  std::string login_id;
-  account_type_t account_type;
-  std::string site_host;
-  std::string api_host;
-  std::string sock_host;
+    splitted_url platform_url;
+    std::string login_id;
+    account_type_t account_type;
+    std::string site_host;
+    std::string api_host;
+    std::string sock_host;
 };
 
-class authenticator {
-public:
-  authenticator(std::string username, std::string password,
-                std::string account_id);
+namespace authenticator {
+    account_detail authenticate(std::string username, std::string password,
+                                std::string account_id);
 
-  boost::asio::awaitable<account_detail>
-  authenticate(const boost::asio::any_io_executor &executor);
-
-private:
-  std::string username_;
-  std::string password_;
-  std::string account_id_;
+    account_detail authenticate();
 };
 
 #endif // AUTHENTICATOR_H

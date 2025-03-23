@@ -19,8 +19,6 @@ namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 using tcp = net::ip::tcp;
-using net::awaitable;
-using net::use_awaitable;
 namespace ssl = boost::asio::ssl;
 
 constexpr auto port = "443";
@@ -49,17 +47,17 @@ std::string decompress_gzip(const std::string &compressed_data) {
 
     result = inflate(&zs, Z_NO_FLUSH);
     assert(result != Z_STREAM_ERROR &&
-           "Zlib stream error during decompression");
+      "Zlib stream error during decompression");
 
     switch (result) {
-    case Z_NEED_DICT:
-      result = Z_DATA_ERROR;
-      [[fallthrough]];
-    case Z_DATA_ERROR:
-    case Z_MEM_ERROR:
-      inflateEnd(&zs);
-      assert(false && "Zlib decompression error");
-      break;
+      case Z_NEED_DICT:
+        result = Z_DATA_ERROR;
+        [[fallthrough]];
+      case Z_DATA_ERROR:
+      case Z_MEM_ERROR:
+        inflateEnd(&zs);
+        assert(false && "Zlib decompression error");
+        break;
     }
 
     // Append decompressed data
@@ -74,18 +72,17 @@ std::string decompress_gzip(const std::string &compressed_data) {
   return decompressed;
 }
 
-http_client::http_client(const net::any_io_executor &executor,
-                         std::string_view host)
-    : executor_(executor), host_(host), socket_(executor, ssl_ctx),
-      jar_(host.data()) {}
+http_client::http_client(std::string_view host)
+  : host_(host), socket_(io_context_, ssl_ctx),
+    jar_(host.data()) {
+}
 
-boost::asio::awaitable<void> http_client::ensure_connected() {
+void http_client::ensure_connected() {
   if (!socket_.lowest_layer().is_open()) {
-    auto endpoints = co_await td_resolve(executor_, host_, port);
-    co_await net::async_connect(socket_.next_layer(), endpoints, use_awaitable);
-    co_await socket_.async_handshake(ssl::stream_base::client, use_awaitable);
+    auto endpoints = td_resolve_sync(io_context_, host_, port);
+    net::connect(socket_.next_layer(), endpoints);
+    socket_.handshake(ssl::stream_base::client);
   }
-  co_return;
 }
 
 void http_client::set_req_defaults(http::request<http::string_body> &req) {
@@ -95,14 +92,14 @@ void http_client::set_req_defaults(http::request<http::string_body> &req) {
   req.set(http::field::accept_encoding, "gzip, deflate");
 }
 
-boost::asio::awaitable<response> http_client::get(const std::string &path) {
+response http_client::get(const std::string &path) {
   http::request<http::string_body> req{http::verb::get, path, 11};
   set_req_defaults(req);
 
   return send(std::move(req), headers());
 }
 
-boost::asio::awaitable<response>
+response
 http_client::post(const std::string &path, const std::string &content_type,
                   const std::string &body) {
   http::request<http::string_body> req{http::verb::post, path, 11};
@@ -114,24 +111,29 @@ http_client::post(const std::string &path, const std::string &content_type,
   return send(std::move(req), headers());
 }
 
-boost::asio::awaitable<response> http_client::send(request req,
-                                                   headers headers) {
-  co_await ensure_connected();
+response http_client::send(request req, headers headers) {
+  ensure_connected();
 
   if (!default_headers().empty()) {
-    for (const auto &[name, value] : default_headers()) {
+    for (const auto &[name, value]: default_headers()) {
+      req.insert(name, value);
+    }
+  }
+
+  if (!headers.empty()) {
+    for (const auto &[name, value]: headers) {
       req.insert(name, value);
     }
   }
 
   jar_.apply(req);
 
-  co_await http::async_write(socket_, req, use_awaitable);
+  http::write(socket_, req);
 
   // Read the response.
   boost::beast::flat_buffer buffer;
   http::response<http::string_body> res;
-  co_await http::async_read(socket_, buffer, res, use_awaitable);
+  http::read(socket_, buffer, res);
 
   jar_.update(res);
 
@@ -143,5 +145,5 @@ boost::asio::awaitable<response> http_client::send(request req,
     }
   }
 
-  co_return res;
+  return res;
 }

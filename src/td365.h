@@ -98,7 +98,7 @@ public:
   // Tick callback function type
   using tick_callback = std::function<void(const tick &)>;
 
-  explicit td365(tick_callback callback = nullptr);
+  explicit td365();
 
   ~td365();
 
@@ -116,9 +116,10 @@ public:
   void subscribe(int quote_id) const;
 
   // Block until the WebSocket connection is closed
-  void wait_for_disconnect() const;
+  void main_loop(tick_callback) const;
 
 private:
+  // td365 facades platform to prevent any boost leakage (in case app does not use boost)
   std::unique_ptr<class platform> platform_;
 };
 

@@ -29,5 +29,9 @@ std::string now_utc();
 boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
 td_resolve(const boost::asio::any_io_executor &executor,
            const std::string &host, const std::string &port);
+           
+boost::asio::ip::tcp::resolver::results_type
+td_resolve_sync(boost::asio::io_context &io_context,
+                const std::string &host, const std::string &port);
 
 #endif
