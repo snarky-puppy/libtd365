@@ -10,7 +10,8 @@
 #include <iostream>
 
 td365::td365(tick_callback callback)
-    : platform_(std::make_unique<platform>(std::move(callback))) {}
+  : platform_(std::make_unique<platform>(std::move(callback))) {
+}
 
 // Define destructor here to ensure complete definition of platform is available
 td365::~td365() = default;
@@ -19,6 +20,11 @@ void td365::connect(const std::string &username, const std::string &password,
                     const std::string &account_id) {
   platform_->connect(username, password, account_id);
 }
+
+void td365::connect_demo() const {
+  platform_->connect_demo();
+}
+
 
 std::vector<market_group> td365::get_market_super_group() const {
   return platform_->get_market_super_group();

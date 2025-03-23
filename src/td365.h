@@ -19,7 +19,7 @@ struct market_group {
   std::string name;
   bool is_super_group;
   bool is_white_label_popular_market; // if true, not really a super group. call
-                                      // get_market_quote directly.
+  // get_market_quote directly.
   bool has_subscription;
 };
 
@@ -83,11 +83,11 @@ struct tick {
   bool call_only;
   double mid_price;
   std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>
-      timestamp;
+  timestamp;
   int field13; // Unknown field
   grouping group;
   std::chrono::nanoseconds latency{}; // difference between received timestamp
-                                      // and timestamp sent by server
+  // and timestamp sent by server
 };
 
 // Forward declaration for stream operator
@@ -104,6 +104,8 @@ public:
 
   void connect(const std::string &username, const std::string &password,
                const std::string &account_id);
+
+  void connect_demo() const;
 
   std::vector<market_group> get_market_super_group() const;
 

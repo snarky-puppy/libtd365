@@ -12,6 +12,14 @@ This library provides a modern C++ interface to access TD365 trading platform fe
 - ~~Position tracking~~ TODO
 - Market data access
 
+## TODO
+
+- code cleanup
+- package version
+- Use namespace abbreviations as per https://www.boost.org/doc/libs/1_87_0/libs/beast/doc/html/beast/using_io.html
+- order management
+- position/account tracking
+
 ## Requirements
 
 - C++23 compatible compiler
