@@ -100,7 +100,7 @@ std::vector<market> platform::get_market_quote(int id) {
 }
 
 void platform::on_tick_received(const tick &t) {
-  std::unique_lock<std::mutex> lock(tick_queue_mutex_);
+  auto lock = std::unique_lock(tick_queue_mutex_);
   tick_queue_.push(t);
   tick_queue_cv_.notify_one();
 }

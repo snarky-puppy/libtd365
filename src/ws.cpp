@@ -6,6 +6,9 @@
  */
 
 #include "ws.h"
+
+#include <boost/lexical_cast.hpp>
+#include <iostream>
 #include "constants.h"
 #include "utils.h"
 #include <boost/asio/detached.hpp>
@@ -21,6 +24,15 @@ using tcp = net::ip::tcp;
 using net::awaitable;
 using net::use_awaitable;
 namespace ssl = boost::asio::ssl;
+
+bool
+is_debug_enabled() {
+  static bool enabled = [] {
+    auto value = std::getenv("DEBUG");
+    return value ? boost::lexical_cast<bool>(value) : false;
+  }();
+  return enabled;
+}
 
 ws::ws(const boost::asio::any_io_executor &executor) : ws_(executor, ssl_ctx) {
 }
@@ -84,6 +96,9 @@ ws::send(std::string_view message) {
   if (ec != std::errc{}) {
     throw boost::system::system_error(ec);
   }
+  if (is_debug_enabled()) {
+    std::cout << ">> " << message << std::endl;
+  }
 }
 
 boost::asio::awaitable<std::pair<boost::system::error_code, std::string> >
@@ -99,6 +114,10 @@ ws::read_message() {
 
   std::string buf(static_cast<const char *>(buffer.cdata().data()),
                   buffer.cdata().size());
+
+  if (is_debug_enabled()) {
+    std::cout << "<< " << buf << std::endl;
+  }
 
   co_return std::make_pair(ec, std::move(buf));
 }

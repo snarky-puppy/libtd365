@@ -14,6 +14,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/ssl.hpp>
 #include <iostream>
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include <print>
 #include <cstdlib>
@@ -33,19 +34,12 @@ enum class payload_type {
   authentication_response,
   unknown,
   subscribe_response,
-  price_data
+  price_data,
+  account_summary,
+  account_details
 };
 
 constexpr auto port = "443";
-
-bool
-is_debug_enabled() {
-  static bool enabled = [] {
-    auto value = std::getenv("DEBUG");
-    return value ? boost::lexical_cast<bool>(value) : false;
-  }();
-  return enabled;
-}
 
 payload_type string_to_payload_type(std::string_view str) {
   static const std::unordered_map<std::string_view, payload_type> lookup = {
@@ -150,7 +144,7 @@ void ws_client::start_loop(std::string host, std::string login_id, std::string t
         auto ec = co_await process_messages(login_id, token);
         if (ec)
           if (ec == boost::beast::websocket::error::closed) {
-            co_await reconnect();
+            co_await reconnect(host);
             continue;
           }
         std::println(std::cerr, "ws_client: {} ({})", ec.message(), ec.what());
@@ -182,11 +176,15 @@ void ws_client::close_sync() {
 }
 
 boost::asio::awaitable<void> ws_client::subscribe(int quote_id) {
-  co_await send({
-    {"quoteId", quote_id},
-    {"priceGrouping", "Sampled"},
-    {"action", "subscribe"}
-  });
+  if (std::ranges::find(subscribed_, quote_id) == std::ranges::end(subscribed_)) {
+    subscribed_.push_back(quote_id);
+    co_await send({
+      {"quoteId", quote_id},
+      {"priceGrouping", "Sampled"},
+      {"action", "subscribe"}
+    });
+  }
+  co_return;
 }
 
 void ws_client::subscribe_sync(int quote_id) {
@@ -194,11 +192,15 @@ void ws_client::subscribe_sync(int quote_id) {
 }
 
 boost::asio::awaitable<void> ws_client::unsubscribe(int quote_id) {
-  co_await send({
-    {"quoteId", quote_id},
-    {"priceGrouping", "Sampled"},
-    {"action", "unsubscribe"}
-  });
+  auto pos = std::ranges::find(subscribed_, quote_id);
+  if (pos != std::ranges::end(subscribed_)) {
+    subscribed_.erase(pos);
+    co_await send({
+      {"quoteId", quote_id},
+      {"priceGrouping", "Sampled"},
+      {"action", "unsubscribe"}
+    });
+  }
 }
 
 void ws_client::unsubscribe_sync(int quote_id) {
@@ -212,13 +214,18 @@ void ws_client::wait_for_disconnect() {
   }
 }
 
-boost::asio::awaitable<void> ws_client::reconnect() {
+boost::asio::awaitable<void> ws_client::reconnect(const std::string &host) {
+  std::cout << "reconnecting..." << std::endl;
   ws_.reset(new ws(io_context_.get_executor()));
-
-  // Optionally wait a second before reconnecting.
-  net::steady_timer timer(io_context_);
-  timer.expires_after(std::chrono::seconds(1));
-  co_await timer.async_wait(use_awaitable);
+  co_await ws_->connect(host, port);
+  for (auto quote_id: subscribed_) {
+    co_await send({
+      {"quoteId", quote_id},
+      {"priceGrouping", "Sampled"},
+      {"action", "subscribe"}
+    });
+  }
+  co_return;
 }
 
 boost::asio::awaitable<void> ws_client::connect(const std::string &host) {
@@ -246,14 +253,12 @@ ws_client::process_messages(const std::string &login_id,
 
     auto msg = nlohmann::json::parse(buf);
 
-    if (is_debug_enabled()) {
-      std::cout << msg.dump() << std::endl;
-    }
-
     switch (string_to_payload_type(msg["t"].get<std::string>())) {
       case payload_type::connect_response:
         co_await process_connect_response(msg, login_id, token);
         break;
+      case payload_type::reconnect_response:
+        co_await process_reconnect_response(msg);
       case payload_type::heartbeat:
         co_await process_heartbeat(msg);
         break;
@@ -288,6 +293,13 @@ ws_client::process_heartbeat(const nlohmann::json &j) {
   co_return;
 }
 
+
+boost::asio::awaitable<void>
+ws_client::process_reconnect_response(const nlohmann::json &msg) {
+  connection_id_ = msg["cid"].get<std::string>();
+  co_return;
+}
+
 boost::asio::awaitable<void>
 ws_client::process_connect_response(const nlohmann::json &msg,
                                     const std::string &login_id,
@@ -305,7 +317,16 @@ ws_client::process_connect_response(const nlohmann::json &msg,
 
 boost::asio::awaitable<void>
 ws_client::process_authentication_response(const nlohmann::json &msg) {
-  // FIXME: assumes everything is good here
+  if (!msg["d"]["Result"].get<bool>()) {
+    throw std::runtime_error("Authentication failed");
+  }
+  if (!connection_id_.empty()) {
+    co_await send({
+      {"action", "reconnect"},
+      {"originalConnectionId", connection_id_}
+    });
+  }
+  connection_id_ = msg["cid"].get<std::string>();
   auth_promise_.set_value();
   co_return;
 }

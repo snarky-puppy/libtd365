@@ -38,10 +38,12 @@ public:
     boost::asio::awaitable<void> send(const nlohmann::json &);
 
     boost::asio::awaitable<void> close();
-    
+
     // Synchronous methods for platform
     void close_sync();
+
     void subscribe_sync(int quote_id);
+
     void unsubscribe_sync(int quote_id);
 
     boost::asio::awaitable<void> subscribe(int quote_id);
@@ -53,7 +55,7 @@ public:
     // Block until the WebSocket connection is closed
     void wait_for_disconnect();
 
-    boost::asio::awaitable<void> reconnect();
+    boost::asio::awaitable<void> reconnect(const std::string &host);
 
 private:
     template<typename Awaitable>
@@ -62,6 +64,8 @@ private:
     auto run_awaitable(boost::asio::awaitable<void>) -> void;
 
     void process_subscribe_response(const nlohmann::json &msg);
+
+    boost::asio::awaitable<void> process_reconnect_response(const nlohmann::json &msg);
 
     boost::asio::awaitable<::boost::beast::error_code> process_messages(const std::string &login_id,
                                                                         const std::string &token);
@@ -85,7 +89,7 @@ private:
     boost::asio::io_context io_context_;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
     std::thread io_thread_;
-    
+
     std::unique_ptr<ws> ws_;
     const std::atomic<bool> &shutdown_;
     std::string supported_version_ = "1.0.0.6";
@@ -97,6 +101,8 @@ private:
     std::atomic<bool> connected_{false};
     std::promise<void> disconnect_promise_;
     std::future<void> disconnect_future_;
+    std::string connection_id_;
+    std::vector<int> subscribed_;
 };
 
 #endif // WS_CLIENT_H
