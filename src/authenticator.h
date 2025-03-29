@@ -12,11 +12,10 @@
 #include <boost/asio/awaitable.hpp>
 #include <string>
 
-typedef enum { demo, prod } account_type_t;
+typedef enum { demo, prod, oneclick } account_type_t;
 
 struct account_detail {
     splitted_url platform_url;
-    std::string login_id;
     account_type_t account_type;
     std::string site_host;
     std::string api_host;

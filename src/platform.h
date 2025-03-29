@@ -59,12 +59,16 @@ private:
     boost::asio::io_context io_context_;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
     std::thread io_thread_;
+    boost::asio::steady_timer token_timer_;
 
     // Callback to handle ticks received from WebSocket
     void on_tick_received(const tick &t);
 
     // Process ticks on a separate thread
     void process_ticks_thread();
+
+    boost::asio::awaitable<void> update_session_token();
+
 
     std::unique_ptr<api_client> api_client_;
     std::unique_ptr<ws_client> ws_client_;

@@ -17,25 +17,31 @@
 
 class api_client {
 public:
-  explicit api_client(const boost::asio::any_io_executor &executor,
-                      std::string_view host);
+    struct login_response {
+        std::string token;
+        std::string login_id;
+    };
 
-  // login returns a token used to authenticate the websocket
-  boost::asio::awaitable<std::string> login(std::string path);
+    explicit api_client(const boost::asio::any_io_executor &executor,
+                        std::string_view host);
 
-  boost::asio::awaitable<void> update_session_token();
+    // login returns a token used to authenticate the websocket
+    boost::asio::awaitable<login_response> login(std::string path);
 
-  boost::asio::awaitable<std::vector<market_group>> get_market_super_group();
+    // I think that this is some kind of keep-alive as it doesn't return anythjing
+    boost::asio::awaitable<void> update_session_token();
 
-  boost::asio::awaitable<std::vector<market_group>>
-  get_market_group(unsigned int id);
+    boost::asio::awaitable<std::vector<market_group> > get_market_super_group();
 
-  boost::asio::awaitable<std::vector<market>> get_market_quote(unsigned int id);
+    boost::asio::awaitable<std::vector<market_group> >
+    get_market_group(unsigned int id);
+
+    boost::asio::awaitable<std::vector<market> > get_market_quote(unsigned int id);
 
 private:
-  http_client client_;
+    http_client client_;
 
-  boost::asio::awaitable<std::string> connect(std::string path);
+    boost::asio::awaitable<std::pair<std::string, std::string> > connect(std::string path);
 };
 
 #endif // API_CLIENT_H

@@ -48,7 +48,8 @@ platform::platform()
       } catch (const std::exception &e) {
         std::cerr << "IO thread exception: " << e.what() << std::endl;
       }
-    }) {
+    }),
+    token_timer_(io_context_) {
 }
 
 platform::~platform() {
@@ -81,14 +82,17 @@ void platform::connect(const std::string &username, const std::string &password,
 void platform::connect(account_detail auth_detail) {
   try {
     api_client_ = std::make_unique<api_client>(io_context_.get_executor(), auth_detail.platform_url.host);
-    auto token = run_awaitable(api_client_->login(auth_detail.platform_url.path));
+    auto login = run_awaitable(api_client_->login(auth_detail.platform_url.path));
 
     ws_client_ = std::make_unique<ws_client>(
       io_context_.get_executor(),
       shutdown_,
       [this](const tick &t) { on_tick_received(t); });
 
-    ws_client_->start_loop(std::move(auth_detail.sock_host), std::move(auth_detail.login_id), std::move(token));
+    ws_client_->start_loop(std::move(auth_detail.sock_host), std::move(login.login_id), std::move(login.token));
+
+    // Start the token update timer
+    run_awaitable(update_session_token());
   } catch (const boost::exception &e) {
     std::string diag = boost::diagnostic_information(e);
     std::cerr << "connect: " << diag << std::endl;
@@ -127,6 +131,18 @@ void platform::on_tick_received(const tick &t) {
   auto lock = std::unique_lock(tick_queue_mutex_);
   tick_queue_.push(t);
   tick_queue_cv_.notify_one();
+}
+
+boost::asio::awaitable<void> platform::update_session_token() {
+  co_await api_client_->update_session_token();
+
+  token_timer_.expires_after(std::chrono::seconds(60));
+  token_timer_.async_wait([self = shared_from_this()](const boost::system::error_code &error) {
+    if (!error && !self->shutdown_) {
+      self->run_awaitable(self->update_session_token());
+    }
+  });
+  co_return;
 }
 
 void platform::main_loop(std::function<void(const tick &)> tick_callback) {

@@ -22,79 +22,84 @@ using json = nlohmann::json;
 
 api_client::api_client(const net::any_io_executor &executor,
                        std::string_view host)
-  : client_(executor, host) {
+    : client_(executor, host) {
 }
 
-boost::asio::awaitable<std::string> api_client::connect(std::string path) {
-  auto response = co_await client_.get(path);
-  if (response.result() == boost::beast::http::status::ok) {
-    // extract the ots value here while we have the path
-    // GET /Advanced.aspx?ots=WJFUMNFE
-    // ots is the name of the cookie with the session token
-    static std::regex re(R"(^.*?ots=(.*)$)");
-    std::smatch m;
-    assert(std::regex_match(path, m, re));
-    auto ots = m[1].str();
-    co_return ots;
-  }
-  assert(response.result() == boost::beast::http::status::found);
-  const auto location = response.at(boost::beast::http::field::location);
-  co_return co_await connect(std::move(location));
+boost::asio::awaitable<std::pair<std::string, std::string> > api_client::connect(std::string path) {
+    auto response = co_await client_.get(path);
+    if (response.result() == boost::beast::http::status::ok) {
+        // extract the ots value here while we have the path
+        // GET /Advanced.aspx?ots=WJFUMNFE
+        // ots is the name of the cookie with the session token
+        static std::regex ots_re(R"(^.*?ots=(.*)$)");
+        std::smatch m;
+        assert(std::regex_match(path, m, ots_re));
+        auto ots = m[1].str();
+
+        auto body = response.body();
+        static std::regex login_id_re(R"(id=\"hfLoginID\" value=\"([^\"]+)\")");
+        assert(std::regex_search(body, m, login_id_re));
+        auto login_id = m[1].str();
+        co_return std::make_pair(ots, login_id);
+    }
+    assert(response.result() == boost::beast::http::status::found);
+    const auto location = response.at(boost::beast::http::field::location);
+    co_return co_await connect(std::move(location));
 }
 
-boost::asio::awaitable<std::string> api_client::login(std::string path) {
-  auto ots = co_await connect(path);
-  auto token = client_.jar().get(ots);
+boost::asio::awaitable<api_client::login_response> api_client::login(std::string path) {
+    auto [ots, login_id] = co_await connect(path);
+    auto token = client_.jar().get(ots);
 
-  client_.set_default_headers({
-    {http::field::origin, "https://demo.tradedirect365.com"},
-    {
-      http::field::referer,
-      "https://demo.tradedirect365.com/Advanced.aspx?ots=" + ots
-    },
-  });
-  co_return token.value;
+    client_.set_default_headers({
+        {http::field::origin, "https://demo.tradedirect365.com"},
+        {
+            http::field::referer,
+            "https://demo.tradedirect365.com/Advanced.aspx?ots=" + ots
+        },
+    });
+    co_return login_response{token.value, login_id};
 }
 
 boost::asio::awaitable<void> api_client::update_session_token() {
-  auto resp = co_await client_.post("/UTSAPI.asmx/UpdateClientSessionID",
-                                    "application/json; charset=utf-8", "");
-  assert(resp.result() == boost::beast::http::status::ok);
-  co_return;
+    auto resp = co_await client_.post("/UTSAPI.asmx/UpdateClientSessionID",
+                                      "application/json; charset=utf-8", "");
+    assert(resp.result() == boost::beast::http::status::ok);
+    co_return;
 }
 
 boost::asio::awaitable<std::vector<market_group> >
 api_client::get_market_super_group() {
-  auto resp = co_await client_.post("/UTSAPI.asmx/GetMarketSuperGroup",
-                                    "application/json", "");
-  assert(resp.result() == boost::beast::http::status::ok);
-  auto j = json::parse(resp.body());
-  auto rv = j["d"].get<std::vector<market_group> >();
-  co_return rv;
+    auto resp = co_await client_.post("/UTSAPI.asmx/GetMarketSuperGroup",
+                                      "application/json", "");
+    assert(resp.result() == boost::beast::http::status::ok);
+    auto j = json::parse(resp.body());
+    auto rv = j["d"].get<std::vector<market_group> >();
+    co_return rv;
 }
 
 boost::asio::awaitable<std::vector<market_group> >
 api_client::get_market_group(unsigned int id) {
-  json body = {{"superGroupId", id}};
-  auto resp =
-      co_await client_.post("/UTSAPI.asmx/GetMarketGroup",
-                            "application/json; charset=utf-8", body.dump());
-  assert(resp.result() == boost::beast::http::status::ok);
-  auto j = json::parse(resp.body());
-  auto rv = j["d"].get<std::vector<market_group> >();
-  co_return rv;
+    json body = {{"superGroupId", id}};
+    auto resp =
+            co_await client_.post("/UTSAPI.asmx/GetMarketGroup",
+                                  "application/json; charset=utf-8", body.dump());
+    assert(resp.result() == boost::beast::http::status::ok);
+    auto j = json::parse(resp.body());
+    auto rv = j["d"].get<std::vector<market_group> >();
+    co_return rv;
 }
 
 boost::asio::awaitable<std::vector<market> >
 api_client::get_market_quote(unsigned int id) {
-  json body = {
-    {"groupID", id}, {"keyword", ""}, {"popular", false},
-    {"portfolio", false}, {"search", false},
-  };
-  auto resp = co_await client_.post("/UTSAPI.asmx/GetMarketQuote",
-                                    "application/json", body.dump());
-  assert(resp.result() == boost::beast::http::status::ok);
-  auto j = json::parse(resp.body());
-  auto rv = j["d"].get<std::vector<market> >();
-  co_return rv;
+    json body = {
+        {"groupID", id}, {"keyword", ""}, {"popular", false},
+        {"portfolio", false}, {"search", false},
+    };
+    auto resp = co_await client_.post("/UTSAPI.asmx/GetMarketQuote",
+                                      "application/json", body.dump());
+    assert(resp.result() == boost::beast::http::status::ok);
+    auto j = json::parse(resp.body());
+    auto rv = j["d"].get<std::vector<market> >();
+    co_return rv;
 }
