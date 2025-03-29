@@ -13,6 +13,7 @@
 #include "api_client.h"
 #include "td365.h"
 #include "ws_client.h"
+#include <boost/asio.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <queue>
 #include <thread>
@@ -50,6 +51,15 @@ public:
     std::vector<market> get_market_quote(int id);
 
 private:
+    template<typename Awaitable>
+    auto run_awaitable(Awaitable awaitable) -> typename Awaitable::value_type;
+
+    auto run_awaitable(boost::asio::awaitable<void>) -> void;
+
+    boost::asio::io_context io_context_;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
+    std::thread io_thread_;
+
     // Callback to handle ticks received from WebSocket
     void on_tick_received(const tick &t);
 

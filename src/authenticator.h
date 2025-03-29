@@ -9,6 +9,7 @@
 #define AUTHENTICATOR_H
 
 #include "utils.h"
+#include <boost/asio/awaitable.hpp>
 #include <string>
 
 typedef enum { demo, prod } account_type_t;
@@ -23,10 +24,11 @@ struct account_detail {
 };
 
 namespace authenticator {
-    account_detail authenticate(std::string username, std::string password,
-                                std::string account_id);
+    boost::asio::awaitable<account_detail>
+    authenticate(const boost::asio::any_io_executor &executor, std::string username, std::string password,
+                 std::string account_id);
 
-    account_detail authenticate();
+    boost::asio::awaitable<account_detail> authenticate();
 };
 
 #endif // AUTHENTICATOR_H

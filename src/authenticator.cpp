@@ -58,60 +58,63 @@ struct auth_token {
     std::chrono::system_clock::time_point expiry_time;
 };
 
-auth_token
-login(const std::string &username, const std::string &password) {
-    http_client cli(OAuthTokenHost);
-    json body = {
-        {"realm", "Username-Password-Authentication"},
-        {"client_id", "eeXrVwSMXPZ4pJpwStuNyiUa7XxGZRX9"},
-        {"scope", "openid"},
-        {"grant_type", "http://auth0.com/oauth/grant-type/password-realm"},
-        {"username", username},
-        {"password", password},
-    };
-    const auto response =
-            cli.post("/oauth/token", "application/json", body.dump());
-    if (response.result() != boost::beast::http::status::ok) {
-        throw std::runtime_error(response.body());
-    }
+boost::asio::awaitable<auth_token>
+login(const boost::asio::any_io_executor &executor, const std::string &username,
+      const std::string &password) {
+  http_client cli(executor, OAuthTokenHost);
+  json body = {
+      {"realm", "Username-Password-Authentication"},
+      {"client_id", "eeXrVwSMXPZ4pJpwStuNyiUa7XxGZRX9"},
+      {"scope", "openid"},
+      {"grant_type", "http://auth0.com/oauth/grant-type/password-realm"},
+      {"username", username},
+      {"password", password},
+  };
+  const auto response =
+      co_await cli.post("/oauth/token", "application/json", body.dump());
+  if (response.result() != boost::beast::http::status::ok) {
+    throw std::runtime_error(response.body());
+  }
 
-    auto json_response = json::parse(response.body());
+  auto json_response = json::parse(response.body());
 
-    return auth_token{
-        .access_token = json_response["access_token"].get<std::string>(),
-        .id_token = json_response["id_token"].get<std::string>(),
-        .expiry_time =
-        std::chrono::system_clock::now() +
-        std::chrono::seconds(json_response["expires_in"].get<int>())
-    };
+  auto rv = auth_token{
+      .access_token = json_response["access_token"].get<std::string>(),
+      .id_token = json_response["id_token"].get<std::string>(),
+      .expiry_time =
+          std::chrono::system_clock::now() +
+          std::chrono::seconds(json_response["expires_in"].get<int>())};
+
+  co_return rv;
 }
 
-json select_account(http_client &client, const std::string &account_id) {
-    auto response = client.get("/TD365/user/accounts/");
-    for (auto j = json::parse(response.body());
-         const auto &account: j["results"]) {
-        if (account["account"] == account_id) {
-            return account;
-        }
+boost::asio::awaitable<json> select_account(http_client &client,
+                                            const std::string &account_id) {
+  auto response = co_await client.get("/TD365/user/accounts/");
+  for (auto j = json::parse(response.body());
+       const auto &account : j["results"]) {
+    if (account["account"] == account_id) {
+      co_return account;
     }
-    throw std::runtime_error("account not found");
+  }
+  throw std::runtime_error("account not found");
 }
 
-splitted_url
+boost::asio::awaitable<splitted_url>
 fetch_platform_url(http_client &client, const std::string &launch_url) {
-    auto response = client.get(launch_url);
-    assert(response.result() == boost::beast::http::status::ok);
+  auto response = co_await client.get(launch_url);
+  assert(response.result() == boost::beast::http::status::ok);
 
-    auto j = json::parse(response.body());
-    auto loginagent_url = j["url"].get<std::string>();
+  auto j = json::parse(response.body());
+  auto loginagent_url = j["url"].get<std::string>();
 
-    return split_url(loginagent_url);
+  co_return split_url(loginagent_url);
 }
 
 namespace authenticator {
-    account_detail
+    boost::asio::awaitable<account_detail>
     authenticate() {
-        return account_detail{
+        co_return account_detail{
             // the "?aid=1026" is required for valid login
             .platform_url = {"demo.tradedirect365.com", "/finlogin/OneClickDemo.aspx?aid=1026"},
             .login_id = "",
@@ -122,28 +125,29 @@ namespace authenticator {
         };
     }
 
-    account_detail
-    authenticate(std::string username, std::string password,
+    boost::asio::awaitable<account_detail>
+    authenticate(const boost::asio::any_io_executor &executor,
+                 std::string username, std::string password,
                  std::string account_id) {
         auto token = auth_token::load();
         if (std::chrono::system_clock::now() > token.expiry_time) {
-            token = login(username, password);
+            token = co_await login(executor, username, password);
             token.save();
         }
 
-        http_client client(PortalSiteHost);
+        http_client client(executor, PortalSiteHost);
 
         std::ostringstream ostr;
         ostr << "Bearer " << token.access_token;
         client.set_default_headers(
             {{boost::beast::http::field::authorization, ostr.str()}});
 
-        auto account = select_account(client, account_id);
+        auto account = co_await select_account(client, account_id);
 
         account_detail details;
         details.account_type = account["accountType"] == "DEMO" ? demo : prod;
 
-        details.platform_url = fetch_platform_url(
+        details.platform_url = co_await fetch_platform_url(
             client, account["button"]["linkTo"].get<std::string>());
         details.login_id = account["ct_login_id"].get<std::string>();
 
@@ -154,6 +158,6 @@ namespace authenticator {
         details.sock_host =
                 std::string(details.account_type == demo ? DemoSockHost : ProdSockHost);
 
-        return details;
+        co_return details;
     }
 }

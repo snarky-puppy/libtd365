@@ -57,87 +57,23 @@ payload_type string_to_payload_type(std::string_view str) {
 
 // Using string_to_price_type from parsing.h
 
-template<typename Awaitable>
-auto ws_client::run_awaitable(Awaitable awaitable) ->
-  typename Awaitable::value_type {
-  std::promise<typename Awaitable::value_type> promise;
-  auto future = promise.get_future();
-
-  net::co_spawn(
-    io_context_.get_executor(),
-    [awaitable = std::move(awaitable),
-      &promise]() mutable -> net::awaitable<void> {
-      try {
-        auto result = co_await std::move(awaitable);
-        promise.set_value(std::move(result));
-      } catch (const std::exception &e) {
-        std::cerr << e.what() << std::endl;
-        promise.set_exception(std::current_exception());
-      }
-    },
-    net::detached);
-
-  return future.get();
-}
-
-auto ws_client::run_awaitable(net::awaitable<void> awaitable) -> void {
-  std::promise<void> promise;
-  auto future = promise.get_future();
-
-  net::co_spawn(
-    io_context_.get_executor(),
-    [awaitable = std::move(awaitable),
-      &promise]() mutable -> net::awaitable<void> {
-      try {
-        co_await std::move(awaitable);
-        promise.set_value();
-      } catch (const std::exception &e) {
-        std::cerr << e.what() << std::endl;
-        promise.set_exception(std::current_exception());
-      }
-    },
-    net::detached);
-
-  future.get();
-}
-
-ws_client::ws_client(const std::atomic<bool> &shutdown,
+ws_client::ws_client(const net::any_io_executor &executor,
+                     const std::atomic<bool> &shutdown,
                      std::function<void(const tick &)> &&tick_callback)
-  : work_guard_(io_context_.get_executor())
-    , ws_(std::make_unique<ws>(io_context_.get_executor()))
+  : executor_(executor)
+    , ws_(std::make_unique<ws>(executor))
     , shutdown_(shutdown)
     , auth_future_(auth_promise_.get_future())
     , tick_callback_(std::move(tick_callback))
     , disconnect_future_(disconnect_promise_.get_future()) {
-  // Start the IO thread
-  io_thread_ = std::thread([this]() {
-    try {
-      ssl_ctx.set_default_verify_paths();
-      io_context_.run();
-    } catch (const std::exception &e) {
-      std::cerr << "IO thread exception: " << e.what() << std::endl;
-    }
-  });
 }
 
 ws_client::~ws_client() {
-  try {
-    // Signal to stop the IO context
-    work_guard_.reset();
-    io_context_.stop();
-
-    // Join the IO thread
-    if (io_thread_.joinable()) {
-      io_thread_.join();
-    }
-  } catch (const std::exception &e) {
-    std::cerr << "ws_client dtor: " << e.what() << std::endl;
-  }
 }
 
 void ws_client::start_loop(std::string host, std::string login_id, std::string token) {
   net::co_spawn(
-    io_context_.get_executor(),
+    executor_,
     [this, token, login_id, host]() -> net::awaitable<void> {
       co_await connect(host);
       while (!shutdown_) {
@@ -169,12 +105,6 @@ boost::asio::awaitable<void> ws_client::close() {
   }
 }
 
-void ws_client::close_sync() {
-  if (connected_) {
-    run_awaitable(close());
-  }
-}
-
 boost::asio::awaitable<void> ws_client::subscribe(int quote_id) {
   if (std::ranges::find(subscribed_, quote_id) == std::ranges::end(subscribed_)) {
     subscribed_.push_back(quote_id);
@@ -185,10 +115,6 @@ boost::asio::awaitable<void> ws_client::subscribe(int quote_id) {
     });
   }
   co_return;
-}
-
-void ws_client::subscribe_sync(int quote_id) {
-  run_awaitable(subscribe(quote_id));
 }
 
 boost::asio::awaitable<void> ws_client::unsubscribe(int quote_id) {
@@ -203,10 +129,6 @@ boost::asio::awaitable<void> ws_client::unsubscribe(int quote_id) {
   }
 }
 
-void ws_client::unsubscribe_sync(int quote_id) {
-  run_awaitable(unsubscribe(quote_id));
-}
-
 void ws_client::wait_for_disconnect() {
   if (connected_) {
     // Wait for the disconnect_future to be ready
@@ -216,7 +138,7 @@ void ws_client::wait_for_disconnect() {
 
 boost::asio::awaitable<void> ws_client::reconnect(const std::string &host) {
   std::cout << "reconnecting..." << std::endl;
-  ws_.reset(new ws(io_context_.get_executor()));
+  ws_.reset(new ws(executor_));
   co_await ws_->connect(host, port);
   for (auto quote_id: subscribed_) {
     co_await send({

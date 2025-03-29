@@ -10,29 +10,32 @@
 
 #include "http_client.h"
 #include "td365.h"
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <string>
 #include <vector>
 
 class api_client {
 public:
-  explicit api_client(std::string_view host);
+  explicit api_client(const boost::asio::any_io_executor &executor,
+                      std::string_view host);
 
   // login returns a token used to authenticate the websocket
-  std::string login(std::string path);
+  boost::asio::awaitable<std::string> login(std::string path);
 
-  void update_session_token();
+  boost::asio::awaitable<void> update_session_token();
 
-  std::vector<market_group> get_market_super_group();
+  boost::asio::awaitable<std::vector<market_group>> get_market_super_group();
 
-  std::vector<market_group>
+  boost::asio::awaitable<std::vector<market_group>>
   get_market_group(unsigned int id);
 
-  std::vector<market> get_market_quote(unsigned int id);
+  boost::asio::awaitable<std::vector<market>> get_market_quote(unsigned int id);
 
 private:
   http_client client_;
 
-  std::string connect(std::string path);
+  boost::asio::awaitable<std::string> connect(std::string path);
 };
 
 #endif // API_CLIENT_H

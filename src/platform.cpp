@@ -9,15 +9,47 @@
 #include "authenticator.h"
 #include "utils.h"
 #include "ws_client.h"
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/beast.hpp>
 #include <boost/exception/diagnostic_information.hpp>
 #include <iostream>
 #include <nlohmann/json.hpp>
 
+namespace beast = boost::beast; // from <boost/beast.hpp>
+namespace http = beast::http; // from <boost/beast/http.hpp>
+namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
+namespace net = boost::asio; // from <boost/asio.hpp>
+namespace ssl = boost::asio::ssl; // from <boost/asio/ssl.hpp>
+using tcp = boost::asio::ip::tcp; // from <boost/asio/ip/tcp.hpp>
+using net::use_awaitable;
 using json = nlohmann::json;
 
-platform::platform() {
+template<typename Duration>
+boost::asio::awaitable<void> async_sleep(Duration duration) {
+  boost::asio::steady_timer timer(co_await boost::asio::this_coro::executor,
+                                  duration);
+  co_await timer.async_wait(boost::asio::use_awaitable);
 }
 
+void confirm_login_response(const nlohmann::json &) {
+  // TODO: think of something to do something here
+}
+
+platform::platform()
+  : work_guard_(io_context_.get_executor()),
+    // Start the IO thread
+    io_thread_([this]() {
+      try {
+        ssl_ctx.set_default_verify_paths();
+        io_context_.run();
+      } catch (const std::exception &e) {
+        std::cerr << "IO thread exception: " << e.what() << std::endl;
+      }
+    }) {
+}
 
 platform::~platform() {
   try {
@@ -38,20 +70,21 @@ platform::~platform() {
 }
 
 void platform::connect() {
-  connect(authenticator::authenticate());
+  connect(run_awaitable(authenticator::authenticate()));
 }
 
 void platform::connect(const std::string &username, const std::string &password,
                        const std::string &account_id) {
-  connect(authenticator::authenticate(username, password, account_id));
+  connect(run_awaitable(authenticator::authenticate(io_context_.get_executor(), username, password, account_id)));
 }
 
 void platform::connect(account_detail auth_detail) {
   try {
-    api_client_ = std::make_unique<api_client>(auth_detail.platform_url.host);
-    auto token = api_client_->login(auth_detail.platform_url.path);
+    api_client_ = std::make_unique<api_client>(io_context_.get_executor(), auth_detail.platform_url.host);
+    auto token = run_awaitable(api_client_->login(auth_detail.platform_url.path));
 
     ws_client_ = std::make_unique<ws_client>(
+      io_context_.get_executor(),
       shutdown_,
       [this](const tick &t) { on_tick_received(t); });
 
@@ -67,36 +100,27 @@ void platform::connect(account_detail auth_detail) {
 
 void platform::shutdown() {
   shutdown_ = true;
-  ws_client_->close_sync();
+  run_awaitable(ws_client_->close());
 }
 
 void platform::subscribe(int quote_id) {
-  ws_client_->subscribe_sync(quote_id);
+  run_awaitable(ws_client_->subscribe(quote_id));
 }
 
 void platform::unsubscribe(int quote_id) {
-  ws_client_->unsubscribe_sync(quote_id);
+  run_awaitable(ws_client_->unsubscribe(quote_id));
 }
 
 std::vector<market_group> platform::get_market_super_group() {
-  if (!api_client_) {
-    return {};
-  }
-  return api_client_->get_market_super_group();
+  return run_awaitable(api_client_->get_market_super_group());
 }
 
 std::vector<market_group> platform::get_market_group(int id) {
-  if (!api_client_) {
-    return {};
-  }
-  return api_client_->get_market_group(id);
+  return run_awaitable(api_client_->get_market_group(id));
 }
 
 std::vector<market> platform::get_market_quote(int id) {
-  if (!api_client_) {
-    return {};
-  }
-  return api_client_->get_market_quote(id);
+  return run_awaitable(api_client_->get_market_quote(id));
 }
 
 void platform::on_tick_received(const tick &t) {
@@ -135,4 +159,48 @@ void platform::main_loop(std::function<void(const tick &)> tick_callback) {
       tick_callback(tick);
     }
   }
+}
+
+template<typename Awaitable>
+auto platform::run_awaitable(Awaitable awaitable) ->
+  typename Awaitable::value_type {
+  std::promise<typename Awaitable::value_type> promise;
+  auto future = promise.get_future();
+
+  net::co_spawn(
+    io_context_.get_executor(),
+    [awaitable = std::move(awaitable),
+      &promise]() mutable -> net::awaitable<void> {
+      try {
+        auto result = co_await std::move(awaitable);
+        promise.set_value(std::move(result));
+      } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        promise.set_exception(std::current_exception());
+      }
+    },
+    net::detached);
+
+  return future.get();
+}
+
+auto platform::run_awaitable(net::awaitable<void> awaitable) -> void {
+  std::promise<void> promise;
+  auto future = promise.get_future();
+
+  net::co_spawn(
+    io_context_.get_executor(),
+    [awaitable = std::move(awaitable),
+      &promise]() mutable -> net::awaitable<void> {
+      try {
+        co_await std::move(awaitable);
+        promise.set_value();
+      } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        promise.set_exception(std::current_exception());
+      }
+    },
+    net::detached);
+
+  future.get();
 }
