@@ -140,7 +140,7 @@ namespace authenticator {
         std::ostringstream ostr;
         ostr << "Bearer " << token.access_token;
         client.set_default_headers(
-            {{boost::beast::http::field::authorization, ostr.str()}});
+            {{"Authorization", ostr.str()}});
 
         auto account = co_await select_account(client, account_id);
 

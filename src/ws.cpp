@@ -34,7 +34,7 @@ is_debug_enabled() {
   return enabled;
 }
 
-ws::ws(const boost::asio::any_io_executor &executor) : ws_(executor, ssl_ctx) {
+ws::ws(const boost::asio::any_io_executor &executor) : ws_(executor, ssl_ctx()) {
 }
 
 boost::asio::awaitable<void>

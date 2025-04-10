@@ -52,9 +52,9 @@ boost::asio::awaitable<api_client::login_response> api_client::login(std::string
     auto token = client_.jar().get(ots);
 
     client_.set_default_headers({
-        {http::field::origin, "https://demo.tradedirect365.com"},
+        {"Origin", "https://demo.tradedirect365.com"},
         {
-            http::field::referer,
+            "Referer",
             "https://demo.tradedirect365.com/Advanced.aspx?ots=" + ots
         },
     });
@@ -62,8 +62,12 @@ boost::asio::awaitable<api_client::login_response> api_client::login(std::string
 }
 
 boost::asio::awaitable<void> api_client::update_session_token() {
-    auto resp = co_await client_.post("/UTSAPI.asmx/UpdateClientSessionID",
-                                      "application/json; charset=utf-8", "");
+    static const char *path = "/UTSAPI.asmx/UpdateClientSessionID";
+    static const headers hdrs = headers({
+        {"Content-Type", "application/json; charset=utf-8"},
+        {"X-Requested-With", "XMLHttpRequest"}
+    });
+    auto resp = co_await client_.post(path, hdrs);
     assert(resp.result() == boost::beast::http::status::ok);
     co_return;
 }

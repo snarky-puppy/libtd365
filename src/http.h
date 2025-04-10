@@ -11,8 +11,8 @@
 #include <boost/asio.hpp>
 #include <boost/beast/http.hpp>
 
-typedef std::unordered_multimap<boost::beast::http::field, const std::string>
-    headers;
+typedef std::unordered_multimap<std::string, std::string>
+headers;
 typedef boost::beast::http::response<boost::beast::http::string_body> response;
 typedef boost::beast::http::request<boost::beast::http::string_body> request;
 

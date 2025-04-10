@@ -43,7 +43,6 @@ platform::platform()
     // Start the IO thread
     io_thread_([this]() {
       try {
-        ssl_ctx.set_default_verify_paths();
         io_context_.run();
       } catch (const std::exception &e) {
         std::cerr << "IO thread exception: " << e.what() << std::endl;
@@ -134,14 +133,18 @@ void platform::on_tick_received(const tick &t) {
 }
 
 boost::asio::awaitable<void> platform::update_session_token() {
-  co_await api_client_->update_session_token();
-
-  token_timer_.expires_after(std::chrono::seconds(60));
-  token_timer_.async_wait([self = shared_from_this()](const boost::system::error_code &error) {
-    if (!error && !self->shutdown_) {
-      self->run_awaitable(self->update_session_token());
+  while (!shutdown_) {
+    try {
+      co_await api_client_->update_session_token();
+    } catch (const std::exception &e) {
+      std::cerr << "update_session_token failed: " << e.what() << std::endl;
     }
-  });
+
+    token_timer_.expires_after(std::chrono::seconds(60));
+    boost::system::error_code ec;
+    co_await token_timer_.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+  }
+
   co_return;
 }
 

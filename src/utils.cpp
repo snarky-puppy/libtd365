@@ -13,13 +13,30 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <charconv>
 #include <iostream>
+#include <fstream>
 #include <ranges>
 #include <regex>
 
 using json = nlohmann::json;
 
-boost::asio::ssl::context ssl_ctx =
-    boost::asio::ssl::context(boost::asio::ssl::context::tlsv12_client);
+boost::asio::ssl::context &ssl_ctx() {
+  static auto ctx =
+      [&]() {
+        auto rv = boost::asio::ssl::context(boost::asio::ssl::context::tlsv12_client);
+        SSL_CTX_set_keylog_callback(rv.native_handle(), [](const SSL *ssl, const char *line) {
+          static const auto fpath = std::getenv("SSLKEYLOGFILE");
+          if (!fpath) {
+            return;
+          }
+          std::ofstream out(fpath, std::ios::app);
+          out << line << std::endl;
+        });
+        rv.set_default_verify_paths();
+        return rv;
+      }();
+  return ctx;
+}
+
 
 std::string now_utc() {
   boost::posix_time::ptime now =
@@ -34,8 +51,8 @@ td_resolve_host_port(const std::string &host, const std::string &port) {
     auto pos = proxy.find(':');
     if (pos != std::string_view::npos) {
       return std::make_pair(std::string(
-        proxy.substr(0, pos)),
-        std::string(proxy.substr(pos+1)));
+                              proxy.substr(0, pos)),
+                            std::string(proxy.substr(pos + 1)));
     } else {
       return std::make_pair(std::string(proxy), "8080");
     }
@@ -49,7 +66,7 @@ td_resolve(const boost::asio::any_io_executor &executor,
   auto [rhost, rport] = td_resolve_host_port(host, port);
   boost::asio::ip::tcp::resolver resolver(executor);
   auto endpoints = co_await resolver.async_resolve(rhost, rport,
-                                                    boost::asio::use_awaitable);
+                                                   boost::asio::use_awaitable);
   co_return endpoints;
 }
 

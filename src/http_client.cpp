@@ -77,13 +77,27 @@ std::string decompress_gzip(const std::string &compressed_data) {
 
 http_client::http_client(const net::any_io_executor &executor,
                          std::string_view host)
-    : executor_(executor), host_(host), socket_(executor, ssl_ctx),
-      jar_(host.data()) {}
+  : executor_(executor), host_(host), socket_(executor, ssl_ctx()),
+    jar_(host.data()),
+    connected_(false) {
+}
 
 boost::asio::awaitable<void> http_client::ensure_connected() {
+  SSL *raw = socket_.native_handle();
+  if (SSL_get_shutdown(raw) & SSL_RECEIVED_SHUTDOWN) {
+    std::cerr << "HTTP connection closed" << std::endl;
+  }
   if (!socket_.lowest_layer().is_open()) {
     auto endpoints = co_await td_resolve(executor_, host_, port);
     co_await net::async_connect(socket_.next_layer(), endpoints, use_awaitable);
+    socket_.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
+
+    int secs = 10;
+    int yes = 1;
+    auto rv1 = setsockopt(socket_.lowest_layer().native_handle(), SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+    std::cout << "setsockopt1 " << rv1 << " " << strerror(errno) << std::endl;
+    auto rv = setsockopt(socket_.lowest_layer().native_handle(), IPPROTO_TCP, TCP_KEEPALIVE, &secs, sizeof(secs));
+    std::cout << "setsockopt " << rv << " " << strerror(errno) << std::endl;
     co_await socket_.async_handshake(ssl::stream_base::client, use_awaitable);
   }
   co_return;
@@ -115,6 +129,16 @@ http_client::post(const std::string &path, const std::string &content_type,
   return send(std::move(req), headers());
 }
 
+boost::asio::awaitable<response>
+http_client::post(const std::string &path,
+                  const headers &hdrs) {
+  http::request<http::string_body> req{http::verb::post, path, 11};
+  set_req_defaults(req);
+  req.prepare_payload();
+
+  return send(std::move(req), hdrs);
+}
+
 boost::asio::awaitable<response> http_client::send(request req,
                                                    headers headers) {
   co_await ensure_connected();
@@ -133,13 +157,23 @@ boost::asio::awaitable<response> http_client::send(request req,
 
   jar_.apply(req);
 
-  co_await http::async_write(socket_, req, use_awaitable);
+  //
+  {
+    boost::system::error_code ec;
+    auto len = co_await http::async_write(socket_, req, redirect_error(use_awaitable, ec));
+    std::cout << "Write: " << req.method() << " " << host_ << " error=" << ec.message() << " len=" << len << std::endl;
+  }
 
   // Read the response.
   boost::beast::flat_buffer buffer;
   http::response<http::string_body> res;
-  co_await http::async_read(socket_, buffer, res, use_awaitable);
 
+  //
+  {
+    boost::system::error_code ec;
+    auto len = co_await http::async_read(socket_, buffer, res, redirect_error(use_awaitable, ec));
+    std::cout << "Read: " << req.method() << " " << host_ << " error=" << ec.message() << " len=" << len << std::endl;
+  }
   jar_.update(res);
 
   if (res.count(http::field::content_encoding)) {
