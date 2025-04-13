@@ -61,15 +61,21 @@ boost::asio::awaitable<api_client::login_response> api_client::login(std::string
     co_return login_response{token.value, login_id};
 }
 
-boost::asio::awaitable<void> api_client::update_session_token() {
+boost::asio::awaitable<api_client::session_token_response> api_client::update_session_token() {
     static const char *path = "/UTSAPI.asmx/UpdateClientSessionID";
     static const headers hdrs = headers({
         {"Content-Type", "application/json; charset=utf-8"},
         {"X-Requested-With", "XMLHttpRequest"}
     });
     auto resp = co_await client_.post(path, hdrs);
-    assert(resp.result() == boost::beast::http::status::ok);
-    co_return;
+    if (resp.result() != boost::beast::http::status::ok) {
+        throw std::runtime_error("Update session token failed");
+    }
+    auto j = json::parse(resp.body());
+    co_return session_token_response{
+        .status = j["d"]["Status"].get<int>(),
+        .message = j["d"]["Message"].get<std::string>()
+    };
 }
 
 boost::asio::awaitable<std::vector<market_group> >

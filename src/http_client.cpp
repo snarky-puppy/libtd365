@@ -13,7 +13,7 @@
 #include <boost/beast/core.hpp>
 #include <cassert>
 #include <iostream>
-#include <zlib.h>
+#include <gzip.h>
 
 namespace net = boost::asio;
 namespace beast = boost::beast;
@@ -25,89 +25,114 @@ namespace ssl = boost::asio::ssl;
 
 constexpr auto port = "443";
 
-// Helper function to decompress gzip-compressed data using zlib.
-// Included to remove the boost iostreams dependency
-std::string decompress_gzip(const std::string &compressed_data) {
-  // Initialize zlib stream
-  z_stream zs = {};
-  zs.next_in =
-      reinterpret_cast<Bytef *>(const_cast<char *>(compressed_data.data()));
-  zs.avail_in = compressed_data.size();
-
-  // Use gzip mode (MAX_WBITS + 16)
-  int result = inflateInit2(&zs, 16 + MAX_WBITS);
-  assert(result == Z_OK && "Failed to initialize zlib for gzip decompression");
-
-  // Initial output buffer size - we'll resize as needed
-  const size_t chunk_size = 16384; // 16KB
-  std::string decompressed;
-  char outbuffer[chunk_size];
-
-  // Decompress until no more data
-  do {
-    zs.next_out = reinterpret_cast<Bytef *>(outbuffer);
-    zs.avail_out = chunk_size;
-
-    result = inflate(&zs, Z_NO_FLUSH);
-    assert(result != Z_STREAM_ERROR &&
-      "Zlib stream error during decompression");
-
-    switch (result) {
-      case Z_NEED_DICT:
-        result = Z_DATA_ERROR;
-        [[fallthrough]];
-      case Z_DATA_ERROR:
-      case Z_MEM_ERROR:
-        inflateEnd(&zs);
-        assert(false && "Zlib decompression error");
-        break;
-    }
-
-    // Append decompressed data
-    size_t bytes_decompressed = chunk_size - zs.avail_out;
-    if (bytes_decompressed > 0) {
-      decompressed.append(outbuffer, bytes_decompressed);
-    }
-  } while (zs.avail_out == 0);
-
-  // Clean up
-  inflateEnd(&zs);
-  return decompressed;
-}
-
 http_client::http_client(const net::any_io_executor &executor,
                          std::string_view host)
-  : executor_(executor), host_(host), socket_(executor, ssl_ctx()),
-    jar_(host.data()),
-    connected_(false) {
+  : executor_(executor), host_(host), stream_(executor, ssl_ctx()),
+    jar_(host.data()) {
 }
 
 boost::asio::awaitable<void> http_client::ensure_connected() {
-  SSL *raw = socket_.native_handle();
-  if (SSL_get_shutdown(raw) & SSL_RECEIVED_SHUTDOWN) {
-    std::cerr << "HTTP connection closed" << std::endl;
-  }
-  if (!socket_.lowest_layer().is_open()) {
-    auto endpoints = co_await td_resolve(executor_, host_, port);
-    co_await net::async_connect(socket_.next_layer(), endpoints, use_awaitable);
-    socket_.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
+  if (!stream_.lowest_layer().is_open()) {
+    boost::system::error_code ec;
 
-    int secs = 10;
-    int yes = 1;
-    auto rv1 = setsockopt(socket_.lowest_layer().native_handle(), SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
-    std::cout << "setsockopt1 " << rv1 << " " << strerror(errno) << std::endl;
-    auto rv = setsockopt(socket_.lowest_layer().native_handle(), IPPROTO_TCP, TCP_KEEPALIVE, &secs, sizeof(secs));
-    std::cout << "setsockopt " << rv << " " << strerror(errno) << std::endl;
-    co_await socket_.async_handshake(ssl::stream_base::client, use_awaitable);
+    auto endpoints = co_await td_resolve(executor_, host_, port);
+    co_await net::async_connect(stream_.lowest_layer(), endpoints, redirect_error(use_awaitable, ec));
+    if (ec) {
+      std::cerr << "connect to " << host_ << " failed: " << ec.message() << std::endl;
+      throw ec;
+    }
+
+    stream_.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
+
+    int secs = 5;
+    auto rv = setsockopt(stream_.lowest_layer().native_handle(), IPPROTO_TCP, TCP_KEEPALIVE, &secs, sizeof(secs));
+    if (rv < 0) {
+      std::cout << "setsockopt " << rv << " " << strerror(errno) << std::endl;
+    }
+
+    if (!SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+      throw boost::system::system_error{
+        static_cast<int>(ERR_get_error()), boost::asio::error::get_ssl_category()
+      };
+
+    co_await stream_.async_handshake(ssl::stream_base::client, redirect_error(use_awaitable, ec));
+    if (ec) {
+      std::cerr << "Handshake failed: " << ec.message() << std::endl;
+      throw ec;
+    }
   }
   co_return;
 }
 
+boost::asio::awaitable<response> http_client::send(request req,
+                                                   headers headers) {
+  co_await ensure_connected();
+
+  if (!default_headers().empty()) {
+    for (const auto &[name, value]: default_headers()) {
+      req.insert(name, value);
+    }
+  }
+
+  if (!headers.empty()) {
+    for (const auto &[name, value]: headers) {
+      req.insert(name, value);
+    }
+  }
+
+  jar_.apply(req);
+
+  //
+  {
+    boost::system::error_code ec;
+    co_await http::async_write(stream_, req, redirect_error(use_awaitable, ec));
+    if (ec) {
+      std::cerr << "http::async_write failed: " << ec.message() << std::endl;
+      throw ec;
+    }
+  }
+
+  // Read the response.
+  boost::beast::flat_buffer buffer;
+  http::response<http::string_body> res;
+
+  //
+  {
+    boost::system::error_code ec;
+    co_await http::async_read(stream_, buffer, res, redirect_error(use_awaitable, ec));
+    if (ec) {
+      if (ec == http::error::end_of_stream) {
+        stream_.lowest_layer().close();
+        stream_ = stream_t(executor_, ssl_ctx());
+      } else {
+        std::cerr << "http::async_read failed: " << ec.message() << std::endl;
+      }
+      throw ec;
+    }
+  }
+  jar_.update(res);
+
+  if (res.count(http::field::content_encoding)) {
+    std::string_view encoding = res[http::field::content_encoding];
+    if (encoding.find("gzip") != std::string::npos) {
+      std::string decompressed = decompress_gzip(res.body());
+      res.body() = std::move(decompressed);
+    }
+  }
+
+  co_return res;
+}
+
+
 void http_client::set_req_defaults(http::request<http::string_body> &req) {
   req.set(http::field::host, host_);
   req.set(http::field::user_agent, UserAgent);
+  req.set(http::field::accept, "*/*");
+  req.set(http::field::accept_language, "en-US,en;q=0.5");
+  req.set("X-Requested-With", "XMLHttpRequest");
+  req.set(http::field::content_type, "application/json; charset=utf-8");
+  req.set(http::field::accept_encoding, "gzip");
   req.set(http::field::connection, "keep-alive");
-  req.set(http::field::accept_encoding, "gzip, deflate");
 }
 
 boost::asio::awaitable<response> http_client::get(const std::string &path) {
@@ -137,52 +162,4 @@ http_client::post(const std::string &path,
   req.prepare_payload();
 
   return send(std::move(req), hdrs);
-}
-
-boost::asio::awaitable<response> http_client::send(request req,
-                                                   headers headers) {
-  co_await ensure_connected();
-
-  if (!default_headers().empty()) {
-    for (const auto &[name, value]: default_headers()) {
-      req.insert(name, value);
-    }
-  }
-
-  if (!headers.empty()) {
-    for (const auto &[name, value]: headers) {
-      req.insert(name, value);
-    }
-  }
-
-  jar_.apply(req);
-
-  //
-  {
-    boost::system::error_code ec;
-    auto len = co_await http::async_write(socket_, req, redirect_error(use_awaitable, ec));
-    std::cout << "Write: " << req.method() << " " << host_ << " error=" << ec.message() << " len=" << len << std::endl;
-  }
-
-  // Read the response.
-  boost::beast::flat_buffer buffer;
-  http::response<http::string_body> res;
-
-  //
-  {
-    boost::system::error_code ec;
-    auto len = co_await http::async_read(socket_, buffer, res, redirect_error(use_awaitable, ec));
-    std::cout << "Read: " << req.method() << " " << host_ << " error=" << ec.message() << " len=" << len << std::endl;
-  }
-  jar_.update(res);
-
-  if (res.count(http::field::content_encoding)) {
-    std::string_view encoding = res[http::field::content_encoding];
-    if (encoding.find("gzip") != std::string::npos) {
-      std::string decompressed = decompress_gzip(res.body());
-      res.body() = std::move(decompressed);
-    }
-  }
-
-  co_return res;
 }

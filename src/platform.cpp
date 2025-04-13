@@ -133,14 +133,23 @@ void platform::on_tick_received(const tick &t) {
 }
 
 boost::asio::awaitable<void> platform::update_session_token() {
+  auto timeout = std::chrono::seconds(60);
   while (!shutdown_) {
     try {
-      co_await api_client_->update_session_token();
-    } catch (const std::exception &e) {
-      std::cerr << "update_session_token failed: " << e.what() << std::endl;
+      auto response = co_await api_client_->update_session_token();
+      if (response.status != 0) {
+        throw std::runtime_error("logged out by server");
+      }
+      timeout = std::chrono::seconds(60);
+    } catch (const boost::system::error_code &ec) {
+      if (ec == http::error::end_of_stream) {
+        timeout = std::chrono::seconds(0);
+      } else {
+        throw ec;
+      }
     }
 
-    token_timer_.expires_after(std::chrono::seconds(60));
+    token_timer_.expires_after(timeout);
     boost::system::error_code ec;
     co_await token_timer_.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
   }

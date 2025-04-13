@@ -14,6 +14,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/beast/ssl.hpp>
 #include <string>
 
 class http_client {
@@ -40,6 +41,11 @@ public:
 private:
     boost::asio::awaitable<void> ensure_connected();
 
+    boost::asio::awaitable<void> read_loop();
+
+    boost::asio::awaitable<void> reconnect();
+
+
     void set_req_defaults(
         boost::beast::http::request<boost::beast::http::string_body> &req);
 
@@ -47,11 +53,11 @@ private:
 
     boost::asio::any_io_executor executor_;
     std::string host_;
-    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket_;
+    using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
+    stream_t stream_;
 
     headers default_headers_;
     cookiejar jar_;
-    bool connected_;
 };
 
 #endif // HTTP_CLIENT_H

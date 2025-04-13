@@ -140,13 +140,6 @@ boost::asio::awaitable<void> ws_client::reconnect(const std::string &host) {
   std::cout << "reconnecting..." << std::endl;
   ws_.reset(new ws(executor_));
   co_await ws_->connect(host, port);
-  for (auto quote_id: subscribed_) {
-    co_await send({
-      {"quoteId", quote_id},
-      {"priceGrouping", "Sampled"},
-      {"action", "subscribe"}
-    });
-  }
   co_return;
 }
 
@@ -249,6 +242,13 @@ ws_client::process_authentication_response(const nlohmann::json &msg) {
     });
   }
   connection_id_ = msg["cid"].get<std::string>();
+  for (auto quote_id: subscribed_) {
+    co_await send({
+      {"quoteId", quote_id},
+      {"priceGrouping", "Sampled"},
+      {"action", "subscribe"}
+    });
+  }
   auth_promise_.set_value();
   co_return;
 }

@@ -22,6 +22,11 @@ public:
         std::string login_id;
     };
 
+    struct session_token_response {
+        int status;
+        std::string message;
+    };
+
     explicit api_client(const boost::asio::any_io_executor &executor,
                         std::string_view host);
 
@@ -29,7 +34,7 @@ public:
     boost::asio::awaitable<login_response> login(std::string path);
 
     // I think that this is some kind of keep-alive as it doesn't return anythjing
-    boost::asio::awaitable<void> update_session_token();
+    boost::asio::awaitable<session_token_response> update_session_token();
 
     boost::asio::awaitable<std::vector<market_group> > get_market_super_group();
 
