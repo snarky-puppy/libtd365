@@ -19,7 +19,7 @@ public:
 
   void save() const;
 
-  void update(const response &res);
+  void update(const http_response &res);
 
   void apply(request &req);
 

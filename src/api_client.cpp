@@ -9,6 +9,7 @@
 #include "json.h"
 #include "utils.h"
 #include <cassert>
+#include <iostream>
 #include <nlohmann/json.hpp>
 #include <regex>
 
@@ -20,13 +21,13 @@ using tcp = boost::asio::ip::tcp; // from <boost/asio/ip/tcp.hpp>
 namespace net = boost::asio;
 using json = nlohmann::json;
 
-api_client::api_client(const net::any_io_executor &executor,
-                       std::string_view host)
-    : client_(executor, host) {
+api_client::api_client(td_context_view ctx)
+    : ctx_(ctx)
+      , timer_(boost::asio::steady_timer(ctx_.executor)) {
 }
 
-boost::asio::awaitable<std::pair<std::string, std::string> > api_client::connect(std::string path) {
-    auto response = co_await client_.get(path);
+boost::asio::awaitable<std::pair<std::string, std::string> > api_client::post_login_flow(std::string path) {
+    auto response = co_await client_->get(path);
     if (response.result() == boost::beast::http::status::ok) {
         // extract the ots value here while we have the path
         // GET /Advanced.aspx?ots=WJFUMNFE
@@ -44,44 +45,76 @@ boost::asio::awaitable<std::pair<std::string, std::string> > api_client::connect
     }
     assert(response.result() == boost::beast::http::status::found);
     const auto location = response.at(boost::beast::http::field::location);
-    co_return co_await connect(std::move(location));
+    co_return co_await post_login_flow(std::move(location));
 }
 
-boost::asio::awaitable<api_client::login_response> api_client::login(std::string path) {
-    auto [ots, login_id] = co_await connect(path);
-    auto token = client_.jar().get(ots);
+boost::asio::awaitable<api_client::auth_info> api_client::open(std::string host, std::string path) {
+    client_ = std::make_unique<http_client>(ctx_, host);
+    auto [ots, login_id] = co_await post_login_flow(path);
+    auto token = client_->jar().get(ots);
 
-    client_.set_default_headers({
+    client_->set_default_headers({
         {"Origin", "https://demo.tradedirect365.com"},
         {
             "Referer",
             "https://demo.tradedirect365.com/Advanced.aspx?ots=" + ots
         },
     });
-    co_return login_response{token.value, login_id};
+    co_return auth_info{token.value, login_id};
 }
 
-boost::asio::awaitable<api_client::session_token_response> api_client::update_session_token() {
-    static const char *path = "/UTSAPI.asmx/UpdateClientSessionID";
-    static const headers hdrs = headers({
+boost::asio::awaitable<void> api_client::close() {
+    timer_.cancel();
+    co_return;
+}
+
+void api_client::start_session_loop(std::atomic<bool> &shutdown) {
+    static const auto path = "/UTSAPI.asmx/UpdateClientSessionID";
+    static const auto hdrs = headers({
         {"Content-Type", "application/json; charset=utf-8"},
         {"X-Requested-With", "XMLHttpRequest"}
     });
-    auto resp = co_await client_.post(path, hdrs);
-    if (resp.result() != boost::beast::http::status::ok) {
-        throw std::runtime_error("Update session token failed");
-    }
-    auto j = json::parse(resp.body());
-    co_return session_token_response{
-        .status = j["d"]["Status"].get<int>(),
-        .message = j["d"]["Message"].get<std::string>()
+
+    auto loop = [this, &shutdown]() -> net::awaitable<void> {
+        auto timeout = std::chrono::seconds(60);
+        while (!shutdown) {
+            try {
+                if (auto resp = co_await client_->post(path, hdrs); resp.result() != http::status::ok) {
+                    // can happen when using mitmproxy
+                    timeout = std::chrono::seconds(0);
+                } else {
+                    timeout = std::chrono::seconds(60);
+                    auto j = json::parse(resp.body());
+                    if (j["d"]["Status"].get<int>() != 0) {
+                        std::cerr << "TODO: log out\n";
+                    }
+                }
+            } catch (const boost::system::error_code &ec) {
+                if (ec == http::error::end_of_stream) {
+                    timeout = std::chrono::seconds(0);
+                } else {
+                    std::cerr << "session_loop: " << ec.message() << std::endl;
+                    throw ec;
+                }
+            }catch (...) {
+                std::cerr << "session_loop: unknown error" << std::endl;
+                throw std::current_exception();
+            }
+
+            timer_.expires_after(timeout);
+            co_await timer_.async_wait();
+        }
+        std::cout << "api_client::session_loop exiting" << std::endl;
+        co_return;
     };
+
+    boost::asio::co_spawn(ctx_.executor, std::move(loop), boost::asio::detached);
 }
 
 boost::asio::awaitable<std::vector<market_group> >
 api_client::get_market_super_group() {
-    auto resp = co_await client_.post("/UTSAPI.asmx/GetMarketSuperGroup",
-                                      "application/json", "");
+    auto resp = co_await client_->post("/UTSAPI.asmx/GetMarketSuperGroup",
+                                       "application/json", "");
     assert(resp.result() == boost::beast::http::status::ok);
     auto j = json::parse(resp.body());
     auto rv = j["d"].get<std::vector<market_group> >();
@@ -92,8 +125,8 @@ boost::asio::awaitable<std::vector<market_group> >
 api_client::get_market_group(unsigned int id) {
     json body = {{"superGroupId", id}};
     auto resp =
-            co_await client_.post("/UTSAPI.asmx/GetMarketGroup",
-                                  "application/json; charset=utf-8", body.dump());
+            co_await client_->post("/UTSAPI.asmx/GetMarketGroup",
+                                   "application/json; charset=utf-8", body.dump());
     assert(resp.result() == boost::beast::http::status::ok);
     auto j = json::parse(resp.body());
     auto rv = j["d"].get<std::vector<market_group> >();
@@ -106,8 +139,8 @@ api_client::get_market_quote(unsigned int id) {
         {"groupID", id}, {"keyword", ""}, {"popular", false},
         {"portfolio", false}, {"search", false},
     };
-    auto resp = co_await client_.post("/UTSAPI.asmx/GetMarketQuote",
-                                      "application/json", body.dump());
+    auto resp = co_await client_->post("/UTSAPI.asmx/GetMarketQuote",
+                                       "application/json", body.dump());
     assert(resp.result() == boost::beast::http::status::ok);
     auto j = json::parse(resp.body());
     auto rv = j["d"].get<std::vector<market> >();

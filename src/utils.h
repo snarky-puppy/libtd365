@@ -8,10 +8,13 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "nlohmann/json_fwd.hpp"
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
+
+#include "execution_ctx.h"
+
+#include "nlohmann/json_fwd.hpp"
 
 nlohmann::json extract_jwt_payload(const nlohmann::json &jwt);
 
@@ -27,7 +30,7 @@ boost::asio::ssl::context &ssl_ctx();
 std::string now_utc();
 
 boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
-td_resolve(const boost::asio::any_io_executor &executor,
+td_resolve(td_context_view ctx,
            const std::string &host, const std::string &port);
 
 boost::asio::ip::tcp::resolver::results_type

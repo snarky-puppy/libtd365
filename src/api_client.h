@@ -10,31 +10,33 @@
 
 #include "http_client.h"
 #include "td365.h"
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <string>
 #include <vector>
 
 class api_client {
 public:
-    struct login_response {
+    struct auth_info {
         std::string token;
         std::string login_id;
     };
 
-    struct session_token_response {
-        int status;
-        std::string message;
+    enum session_token_response {
+        RETRY,
+        FAILURE,
+        LOGOUT,
+        OK
     };
 
-    explicit api_client(const boost::asio::any_io_executor &executor,
-                        std::string_view host);
+    explicit api_client(td_context_view ctx);
 
-    // login returns a token used to authenticate the websocket
-    boost::asio::awaitable<login_response> login(std::string path);
+    // `open` simulates opening the web client page. Returns a token used to authenticate the websocket
+    boost::asio::awaitable<auth_info> open(std::string host, std::string path);
 
-    // I think that this is some kind of keep-alive as it doesn't return anythjing
-    boost::asio::awaitable<session_token_response> update_session_token();
+    boost::asio::awaitable<void> close();
+
+    // I think that this is some kind of keep-alive as it doesn't return anything useful.
+    void start_session_loop(std::atomic<bool> &shutdown);
 
     boost::asio::awaitable<std::vector<market_group> > get_market_super_group();
 
@@ -44,9 +46,11 @@ public:
     boost::asio::awaitable<std::vector<market> > get_market_quote(unsigned int id);
 
 private:
-    http_client client_;
+    td_context_view ctx_;
+    std::unique_ptr<http_client> client_;
+    boost::asio::steady_timer timer_;
 
-    boost::asio::awaitable<std::pair<std::string, std::string> > connect(std::string path);
+    boost::asio::awaitable<std::pair<std::string, std::string> > post_login_flow(std::string path);
 };
 
 #endif // API_CLIENT_H

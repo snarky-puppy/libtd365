@@ -55,14 +55,19 @@ payload_type string_to_payload_type(std::string_view str) {
   return (it != lookup.end()) ? it->second : payload_type::unknown;
 }
 
-// Using string_to_price_type from parsing.h
+bool is_error_continuable(const boost::system::error_code &ec) {
+  if (
+    ec == boost::asio::error::operation_aborted ||
+    ec == boost::beast::websocket::error::closed
+  )
+    return true;
+  return false;
+}
 
-ws_client::ws_client(const net::any_io_executor &executor,
-                     const std::atomic<bool> &shutdown,
-                     std::function<void(const tick &)> &&tick_callback)
-  : executor_(executor)
-    , ws_(std::make_unique<ws>(executor))
-    , shutdown_(shutdown)
+ws_client::ws_client(td_context_view ctx,
+                     std::function<void(tick &&)> &&tick_callback)
+  : ctx_(ctx)
+    , ws_(std::make_unique<ws>(ctx))
     , auth_future_(auth_promise_.get_future())
     , tick_callback_(std::move(tick_callback))
     , disconnect_future_(disconnect_promise_.get_future()) {
@@ -73,17 +78,18 @@ ws_client::~ws_client() {
 
 void ws_client::start_loop(std::string host, std::string login_id, std::string token) {
   net::co_spawn(
-    executor_,
+    ctx_.executor,
     [this, token, login_id, host]() -> net::awaitable<void> {
       co_await connect(host);
-      while (!shutdown_) {
+      while (!ctx_.shutdown_flag) {
         auto ec = co_await process_messages(login_id, token);
-        if (ec)
-          if (ec == boost::beast::websocket::error::closed) {
+        std::println(std::cerr, "ws_client: {} ({})", ec.message(), ec.what());
+        if (ec) {
+          if (is_error_continuable(ec)) {
             co_await reconnect(host);
             continue;
           }
-        std::println(std::cerr, "ws_client: {} ({})", ec.message(), ec.what());
+        }
 
         // Mark as disconnected and notify any waiting threads
         connected_ = false;
@@ -129,16 +135,9 @@ boost::asio::awaitable<void> ws_client::unsubscribe(int quote_id) {
   }
 }
 
-void ws_client::wait_for_disconnect() {
-  if (connected_) {
-    // Wait for the disconnect_future to be ready
-    disconnect_future_.wait();
-  }
-}
-
 boost::asio::awaitable<void> ws_client::reconnect(const std::string &host) {
   std::cout << "reconnecting..." << std::endl;
-  ws_.reset(new ws(executor_));
+  ws_ = std::make_unique<ws>(ctx_);
   co_await ws_->connect(host, port);
   co_return;
 }
@@ -160,7 +159,7 @@ boost::asio::awaitable<void> ws_client::send(const nlohmann::json &body) {
 boost::asio::awaitable<::boost::beast::error_code>
 ws_client::process_messages(const std::string &login_id,
                             const std::string &token) {
-  while (!shutdown_) {
+  while (!ctx_.shutdown_flag) {
     auto [ec, buf] = co_await ws_->read_message();
     if (ec) {
       co_return ec;
@@ -190,6 +189,7 @@ ws_client::process_messages(const std::string &login_id,
         std::cerr << "Unhandled message" << msg.dump() << std::endl;
     }
   }
+  std::cout << "ws_client exiting" << std::endl;
   co_return boost::system::error_code();
 }
 
@@ -255,7 +255,7 @@ ws_client::process_authentication_response(const nlohmann::json &msg) {
 
 void ws_client::deliver_tick(tick &&t) {
   if (tick_callback_) {
-    tick_callback_(t);
+    tick_callback_(std::move(t));
   }
 }
 

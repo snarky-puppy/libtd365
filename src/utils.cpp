@@ -12,7 +12,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <charconv>
-#include <iostream>
+#include <execution_ctx.h>
 #include <fstream>
 #include <ranges>
 #include <regex>
@@ -23,7 +23,7 @@ boost::asio::ssl::context &ssl_ctx() {
   static auto ctx =
       [&]() {
         auto rv = boost::asio::ssl::context(boost::asio::ssl::context::tlsv12_client);
-        SSL_CTX_set_keylog_callback(rv.native_handle(), [](const SSL *ssl, const char *line) {
+        SSL_CTX_set_keylog_callback(rv.native_handle(), [](const SSL *, const char *line) {
           static const auto fpath = std::getenv("SSLKEYLOGFILE");
           if (!fpath) {
             return;
@@ -61,21 +61,13 @@ td_resolve_host_port(const std::string &host, const std::string &port) {
 }
 
 boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
-td_resolve(const boost::asio::any_io_executor &executor,
+td_resolve(td_context_view ctx,
            const std::string &host, const std::string &port) {
   auto [rhost, rport] = td_resolve_host_port(host, port);
-  boost::asio::ip::tcp::resolver resolver(executor);
+  boost::asio::ip::tcp::resolver resolver(ctx.executor);
   auto endpoints = co_await resolver.async_resolve(rhost, rport,
-                                                   boost::asio::use_awaitable);
+                                                   ctx.cancelable());
   co_return endpoints;
-}
-
-boost::asio::ip::tcp::resolver::results_type
-td_resolve_sync(boost::asio::io_context &io_context,
-                const std::string &host, const std::string &port) {
-  auto [rhost, rport] = td_resolve_host_port(host, port);
-  boost::asio::ip::tcp::resolver resolver(io_context);
-  return resolver.resolve(rhost, rport);
 }
 
 json extract_jwt_payload(const json &jwt) {

@@ -9,16 +9,14 @@
 #define PLATFORM_H
 
 #include <authenticator.h>
+#include <condition_variable>
+#include <queue>
+#include <thread>
 
 #include "api_client.h"
 #include "td365.h"
 #include "ws_client.h"
-#include <boost/asio.hpp>
-#include <nlohmann/json_fwd.hpp>
-#include <queue>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
+#include "execution_ctx.h"
 
 class ws_client;
 class api_client;
@@ -32,15 +30,13 @@ public:
     void connect(const std::string &username, const std::string &password,
                  const std::string &account_id);
 
-    void connect(account_detail auth_detail);
-
     void connect();
 
     void shutdown();
 
     void subscribe(int quote_id);
 
-    void main_loop(std::function<void(const tick &)> tick_callback);
+    void main_loop(std::function<void(tick &&)> tick_callback);
 
     void unsubscribe(int quote_id);
 
@@ -56,29 +52,32 @@ private:
 
     auto run_awaitable(boost::asio::awaitable<void>) -> void;
 
-    boost::asio::io_context io_context_;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard_;
+    td_context ctx_;
     std::thread io_thread_;
-    boost::asio::steady_timer token_timer_;
 
-    // Callback to handle ticks received from WebSocket
-    void on_tick_received(const tick &t);
-
-    // Process ticks on a separate thread
-    void process_ticks_thread();
-
-    boost::asio::awaitable<void> update_session_token();
-
-
-    std::unique_ptr<api_client> api_client_;
-    std::unique_ptr<ws_client> ws_client_;
+    api_client api_client_;
+    ws_client ws_client_;
 
     // Thread-safe queue for ticks
     std::queue<tick> tick_queue_;
     std::mutex tick_queue_mutex_;
     std::condition_variable tick_queue_cv_;
 
+    std::promise<void> connected_promise_;
+    std::future<void> connected_future_;
+    std::atomic<bool> connected_{false};
+
     std::atomic<bool> shutdown_{false};
+    boost::asio::cancellation_signal cancel_signal;
+
+
+    void connect(std::function<boost::asio::awaitable<account_detail>()> f);
+
+    void on_tick_received(tick &&t);
+
+    void process_ticks_thread();
+
+    void start_io_thread();
 };
 
 #endif // PLATFORM_H

@@ -8,19 +8,21 @@
 #ifndef HTTP_CLIENT_H
 #define HTTP_CLIENT_H
 
-#include "cookiejar.h"
-#include "http.h"
+#include <string>
+
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
-#include <string>
+
+#include "cookiejar.h"
+#include "execution_ctx.h"
+#include "http.h"
 
 class http_client {
 public:
-    http_client(const boost::asio::any_io_executor &executor,
-                std::string_view host);
+    http_client(td_context_view ctx, std::string host, std::string port = "443");
 
     boost::asio::awaitable<response> get(const std::string &path);
 
@@ -41,18 +43,14 @@ public:
 private:
     boost::asio::awaitable<void> ensure_connected();
 
-    boost::asio::awaitable<void> read_loop();
-
-    boost::asio::awaitable<void> reconnect();
-
-
     void set_req_defaults(
         boost::beast::http::request<boost::beast::http::string_body> &req);
 
     boost::asio::awaitable<response> send(request req, headers headers);
 
-    boost::asio::any_io_executor executor_;
+    td_context_view ctx_;
     std::string host_;
+    std::string port_;
     using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
     stream_t stream_;
 

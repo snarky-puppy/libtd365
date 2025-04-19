@@ -59,9 +59,9 @@ struct auth_token {
 };
 
 boost::asio::awaitable<auth_token>
-login(const boost::asio::any_io_executor &executor, const std::string &username,
+login(td_context_view ctx, const std::string &username,
       const std::string &password) {
-    http_client cli(executor, OAuthTokenHost);
+    http_client cli(ctx, OAuthTokenHost);
     json body = {
         {"realm", "Username-Password-Authentication"},
         {"client_id", "eeXrVwSMXPZ4pJpwStuNyiUa7XxGZRX9"},
@@ -126,16 +126,16 @@ namespace authenticator {
     }
 
     boost::asio::awaitable<account_detail>
-    authenticate(const boost::asio::any_io_executor &executor,
+    authenticate(td_context_view ctx,
                  std::string username, std::string password,
                  std::string account_id) {
         auto token = auth_token::load();
         if (std::chrono::system_clock::now() > token.expiry_time) {
-            token = co_await login(executor, username, password);
+            token = co_await login(ctx, username, password);
             token.save();
         }
 
-        http_client client(executor, PortalSiteHost);
+        http_client client(ctx, PortalSiteHost);
 
         std::ostringstream ostr;
         ostr << "Bearer " << token.access_token;

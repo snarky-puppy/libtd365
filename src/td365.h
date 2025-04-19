@@ -103,7 +103,7 @@ public:
   ~td365();
 
   void connect(const std::string &username, const std::string &password,
-               const std::string &account_id);
+               const std::string &account_id) const;
 
   void connect() const;
 
@@ -116,7 +116,7 @@ public:
   void subscribe(int quote_id) const;
 
   // Block until the WebSocket connection is closed
-  void main_loop(tick_callback) const;
+  void main_loop(const tick_callback &) const;
 
 private:
   // td365 facades platform to prevent any boost leakage (in case app does not use boost)

@@ -8,6 +8,8 @@
 #ifndef WS_H
 #define WS_H
 
+#include <execution_ctx.h>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
@@ -20,7 +22,7 @@ using websocket_type = boost::beast::websocket::stream<
 
 class ws {
 public:
-    explicit ws(const boost::asio::any_io_executor &executor);
+    explicit ws(td_context_view ctx);
 
     boost::asio::awaitable<void> connect(
         const std::string &host,
@@ -34,6 +36,7 @@ public:
     read_message();
 
 private:
+    td_context_view ctx_;
     websocket_type ws_;
 };
 

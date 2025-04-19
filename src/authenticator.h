@@ -8,6 +8,8 @@
 #ifndef AUTHENTICATOR_H
 #define AUTHENTICATOR_H
 
+#include <execution_ctx.h>
+
 #include "utils.h"
 #include <boost/asio/awaitable.hpp>
 #include <string>
@@ -23,9 +25,10 @@ struct account_detail {
 };
 
 namespace authenticator {
-    boost::asio::awaitable<account_detail>
-    authenticate(const boost::asio::any_io_executor &executor, std::string username, std::string password,
-                 std::string account_id);
+    boost::asio::awaitable<account_detail> authenticate(td_context_view ctx,
+                                                        std::string username,
+                                                        std::string password,
+                                                        std::string account_id);
 
     boost::asio::awaitable<account_detail> authenticate();
 };

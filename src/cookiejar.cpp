@@ -15,22 +15,22 @@
 #include <sstream>
 
 namespace {
-std::string trim(const std::string &str) {
-  const auto start = str.find_first_not_of(" \t");
-  if (start == std::string::npos)
-    return "";
-  const auto end = str.find_last_not_of(" \t");
-  return str.substr(start, end - start + 1);
-}
+  std::string trim(const std::string &str) {
+    const auto start = str.find_first_not_of(" \t");
+    if (start == std::string::npos)
+      return "";
+    const auto end = str.find_last_not_of(" \t");
+    return str.substr(start, end - start + 1);
+  }
 
-// Convert a std::tm (in GMT) to time_t.
-std::time_t convert_gmt(const std::tm &tm) {
+  // Convert a std::tm (in GMT) to time_t.
+  std::time_t convert_gmt(const std::tm &tm) {
 #ifdef _WIN32
   return _mkgmtime(const_cast<std::tm *>(&tm));
 #else
-  return timegm(const_cast<std::tm *>(&tm));
+    return timegm(const_cast<std::tm *>(&tm));
 #endif
-}
+  }
 } // anonymous namespace
 
 cookiejar::cookiejar(std::string path) : path_(std::move(path)) {
@@ -47,8 +47,8 @@ cookiejar::cookiejar(std::string path) : path_(std::move(path)) {
       } else {
         c.expiry_time =
             (expiry_time_val == 0)
-                ? std::chrono::system_clock::time_point()
-                : std::chrono::system_clock::from_time_t(expiry_time_val);
+              ? std::chrono::system_clock::time_point()
+              : std::chrono::system_clock::from_time_t(expiry_time_val);
       }
       cookies_[c.name] = c;
     }
@@ -57,17 +57,17 @@ cookiejar::cookiejar(std::string path) : path_(std::move(path)) {
 
 void cookiejar::save() const {
   std::ofstream file(path_, std::ios::trunc);
-  for (const auto &[key, c] : cookies_) {
+  for (const auto &[key, c]: cookies_) {
     std::time_t expiry_time_val =
         (c.expiry_time == std::chrono::system_clock::time_point())
-            ? 0
-            : std::chrono::system_clock::to_time_t(c.expiry_time);
+          ? 0
+          : std::chrono::system_clock::to_time_t(c.expiry_time);
     file << c.name << " " << c.value << " " << expiry_time_val << "\n";
   }
 }
 
-void cookiejar::update(const response &res) {
-  for (const auto &h : res) {
+void cookiejar::update(const http_response &res) {
+  for (const auto &h: res) {
     if (h.name() == boost::beast::http::field::set_cookie) {
       std::string header_value = h.value();
       std::istringstream cookie_stream(header_value);
@@ -81,7 +81,7 @@ void cookiejar::update(const response &res) {
       auto equal_pos = token.find('=');
       if (equal_pos == std::string::npos) {
         std::cerr << "Malformed cookie pair in header: " << header_value
-                  << "\n";
+            << "\n";
         continue;
       }
       cookie cookie_obj;
@@ -108,16 +108,18 @@ void cookiejar::update(const response &res) {
                                      std::chrono::seconds(max_age);
           } catch (...) {
             std::cerr << "Malformed Max-Age in header: " << header_value
-                      << "\n";
+                << "\n";
           }
         } else if (attr_name == "expires") {
           std::tm tm = {};
           auto parsed = false;
 
-          std::vector formats = {"%a, %d %b %Y %H:%M:%S GMT",
-                                 "%a, %d-%b-%Y %H:%M:%S GMT"};
+          std::vector formats = {
+            "%a, %d %b %Y %H:%M:%S GMT",
+            "%a, %d-%b-%Y %H:%M:%S GMT"
+          };
 
-          for (const auto &format : formats) {
+          for (const auto &format: formats) {
             std::istringstream date_stream(attr_value);
             date_stream >> std::get_time(&tm, format);
             if (!date_stream.fail()) {
@@ -127,7 +129,7 @@ void cookiejar::update(const response &res) {
           }
           if (!parsed) {
             std::cerr << "Malformed Expires date in header: " << header_value
-                      << "\n";
+                << "\n";
           } else {
             std::time_t tt = convert_gmt(tm);
             cookie_obj.expiry_time = std::chrono::system_clock::from_time_t(tt);
@@ -153,7 +155,7 @@ void cookiejar::apply(request &req) {
   }
   // Combine valid cookies into a single "Cookie" header.
   std::string cookie_str;
-  for (const auto &pair : cookies_) {
+  for (const auto &pair: cookies_) {
     if (!cookie_str.empty())
       cookie_str += "; ";
     cookie_str += pair.second.name + "=" + pair.second.value;

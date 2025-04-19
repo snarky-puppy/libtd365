@@ -10,10 +10,11 @@
 
 #include <boost/asio.hpp>
 #include <boost/beast/http.hpp>
+#include <utility>
 
-typedef std::unordered_multimap<std::string, std::string>
-headers;
-typedef boost::beast::http::response<boost::beast::http::string_body> response;
-typedef boost::beast::http::request<boost::beast::http::string_body> request;
+using headers = std::unordered_multimap<std::string, std::string>;
+using http_response = boost::beast::http::response<boost::beast::http::string_body>;
+using response = http_response;
+using request = boost::beast::http::request<boost::beast::http::string_body>;
 
 #endif // HTTP_H

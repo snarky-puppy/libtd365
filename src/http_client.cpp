@@ -5,62 +5,70 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
+
 #include "http_client.h"
-#include "constants.h"
-#include "utils.h"
+
+#include <cassert>
+#include <gzip.h>
+#include <iostream>
+
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core.hpp>
-#include <cassert>
-#include <iostream>
-#include <gzip.h>
+
+#include "constants.h"
+#include "utils.h"
 
 namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 using tcp = net::ip::tcp;
 using net::awaitable;
-using net::use_awaitable;
 namespace ssl = boost::asio::ssl;
 
 constexpr auto port = "443";
 
-http_client::http_client(const net::any_io_executor &executor,
-                         std::string_view host)
-  : executor_(executor), host_(host), stream_(executor, ssl_ctx()),
-    jar_(host.data()) {
+http_client::http_client(td_context_view ctx,
+                         std::string host,
+                         std::string port)
+  : ctx_(ctx)
+    , host_(host)
+    , port_(port)
+    , stream_(ctx.executor, ssl_ctx())
+    , jar_(host.data()) {
 }
 
 boost::asio::awaitable<void> http_client::ensure_connected() {
   if (!stream_.lowest_layer().is_open()) {
     boost::system::error_code ec;
 
-    auto endpoints = co_await td_resolve(executor_, host_, port);
-    co_await net::async_connect(stream_.lowest_layer(), endpoints, redirect_error(use_awaitable, ec));
+    std::cout << "http_client::ensure_connected: connecting to " << host_ << std::endl;
+
+    auto endpoints = co_await td_resolve(ctx_, host_, port);
+    co_await net::async_connect(stream_.lowest_layer(), endpoints, redirect_error(ctx_.cancelable(), ec));
     if (ec) {
-      std::cerr << "connect to " << host_ << " failed: " << ec.message() << std::endl;
+      std::cerr << "http_client::ensure_connected: connect to " << host_ << ": " << ec.message() << std::endl;
       throw ec;
     }
 
     stream_.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
 
     int secs = 5;
-    auto rv = setsockopt(stream_.lowest_layer().native_handle(), IPPROTO_TCP, TCP_KEEPALIVE, &secs, sizeof(secs));
-    if (rv < 0) {
-      std::cout << "setsockopt " << rv << " " << strerror(errno) << std::endl;
-    }
-
-    if (!SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
-      throw boost::system::system_error{
+    setsockopt(stream_.lowest_layer().native_handle(), IPPROTO_TCP, TCP_KEEPALIVE, &secs, sizeof(secs));
+    if (!SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str())) {
+      std::cerr << "http_client::ensure_connected: ssl: " << ERR_get_error() << std::endl;
+      throw boost::system::error_code{
         static_cast<int>(ERR_get_error()), boost::asio::error::get_ssl_category()
       };
+    }
 
-    co_await stream_.async_handshake(ssl::stream_base::client, redirect_error(use_awaitable, ec));
+    co_await stream_.async_handshake(ssl::stream_base::client, redirect_error(ctx_.cancelable(), ec));
     if (ec) {
-      std::cerr << "Handshake failed: " << ec.message() << std::endl;
+      std::cerr << "http_client::ensure_connected: handshake: " << ec.message() << std::endl;
       throw ec;
     }
   }
+
   co_return;
 }
 
@@ -85,9 +93,10 @@ boost::asio::awaitable<response> http_client::send(request req,
   //
   {
     boost::system::error_code ec;
-    co_await http::async_write(stream_, req, redirect_error(use_awaitable, ec));
+    co_await http::async_write(stream_, req,
+                               redirect_error(ctx_.cancelable(), ec));
     if (ec) {
-      std::cerr << "http::async_write failed: " << ec.message() << std::endl;
+      std::cerr << "http::async_write: " << ec.message() << std::endl;
       throw ec;
     }
   }
@@ -99,13 +108,13 @@ boost::asio::awaitable<response> http_client::send(request req,
   //
   {
     boost::system::error_code ec;
-    co_await http::async_read(stream_, buffer, res, redirect_error(use_awaitable, ec));
+    co_await http::async_read(stream_, buffer, res, redirect_error(ctx_.cancelable(), ec));
     if (ec) {
       if (ec == http::error::end_of_stream) {
         stream_.lowest_layer().close();
-        stream_ = stream_t(executor_, ssl_ctx());
+        stream_ = stream_t(ctx_.executor, ssl_ctx());
       } else {
-        std::cerr << "http::async_read failed: " << ec.message() << std::endl;
+        std::cerr << "http::async_read: " << ec.message() << std::endl;
       }
       throw ec;
     }

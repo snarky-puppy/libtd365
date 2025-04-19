@@ -8,17 +8,19 @@
 #ifndef WS_CLIENT_H
 #define WS_CLIENT_H
 
-#include "td365.h"
-#include "ws.h"
 #include <atomic>
-#include <boost/asio.hpp>
-#include <condition_variable>
 #include <functional>
 #include <future>
-#include <nlohmann/json_fwd.hpp>
 #include <string>
-#include <thread>
 #include <vector>
+
+#include <boost/asio.hpp>
+
+#include <nlohmann/json_fwd.hpp>
+
+#include "execution_ctx.h"
+#include "td365.h"
+#include "ws.h"
 
 enum class grouping;
 class portal;
@@ -26,9 +28,9 @@ class portal;
 class ws_client {
 public:
     explicit ws_client(
-        const boost::asio::any_io_executor &executor,
-        const std::atomic<bool> &shutdown,
-        std::function<void(const tick &)> &&tick_callback = nullptr);
+        td_context_view ctx,
+        std::function<void(tick &&)> &&tick_callback
+    );
 
     ~ws_client();
 
@@ -46,10 +48,9 @@ public:
 
     std::vector<tick> get_price_data(bool blocking);
 
-    // Block until the WebSocket connection is closed
-    void wait_for_disconnect();
-
     boost::asio::awaitable<void> reconnect(const std::string &host);
+
+    bool connected() { return connected_; };
 
 private:
     void process_subscribe_response(const nlohmann::json &msg);
@@ -75,13 +76,12 @@ private:
 
     void process_price_data(const nlohmann::json &msg);
 
-    boost::asio::any_io_executor executor_;
+    td_context_view ctx_;
     std::unique_ptr<ws> ws_;
-    const std::atomic<bool> &shutdown_;
     std::string supported_version_ = "1.0.0.6";
     std::promise<void> auth_promise_;
     std::future<void> auth_future_;
-    std::function<void(const tick &)> tick_callback_;
+    std::function<void(tick &&)> tick_callback_;
 
     // Connection state tracking
     std::atomic<bool> connected_{false};

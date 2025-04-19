@@ -34,20 +34,22 @@ is_debug_enabled() {
   return enabled;
 }
 
-ws::ws(const boost::asio::any_io_executor &executor) : ws_(executor, ssl_ctx()) {
+ws::ws(td_context_view ctx)
+  : ctx_(ctx)
+    , ws_(ctx.executor, ssl_ctx()) {
 }
 
 boost::asio::awaitable<void>
 ws::connect(
   const std::string &host,
   const std::string &port) {
-  auto const ep = co_await td_resolve(ws_.get_executor(), host, port);
+  auto const ep = co_await td_resolve(ctx_, host, port);
 
   // Set a timeout on the operation
   beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
 
   // Make the connection on the IP address we get from a lookup
-  co_await beast::get_lowest_layer(ws_).async_connect(ep, use_awaitable);
+  co_await beast::get_lowest_layer(ws_).async_connect(ep, ctx_.cancelable());
 
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(ws_.next_layer().native_handle(),
@@ -67,7 +69,7 @@ ws::connect(
 
   // Perform the SSL handshake
   co_await ws_.next_layer().async_handshake(ssl::stream_base::client,
-                                            use_awaitable);
+                                            ctx_.cancelable());
 
   // Turn off the timeout on the tcp_stream, because
   // the websocket stream has its own timeout system.
@@ -86,13 +88,14 @@ ws::close() {
   boost::system::error_code ec;
   get_lowest_layer(ws_).expires_after(std::chrono::seconds(1));
   co_await ws_.async_close(boost::beast::websocket::close_code::normal,
-                           boost::asio::redirect_error(use_awaitable, ec));
+                           boost::asio::redirect_error(ctx_.cancelable(), ec));
 }
 
 boost::asio::awaitable<void>
 ws::send(std::string_view message) {
-  auto [ec, bytes] = co_await ws_.async_write(
-    net::buffer(message), boost::asio::as_tuple(use_awaitable));
+  boost::system::error_code ec;
+  co_await ws_.async_write(
+    net::buffer(message), boost::asio::redirect_error(ctx_.cancelable(), ec));
   if (ec != std::errc{}) {
     throw boost::system::system_error(ec);
   }
@@ -104,9 +107,9 @@ ws::send(std::string_view message) {
 boost::asio::awaitable<std::pair<boost::system::error_code, std::string> >
 ws::read_message() {
   beast::flat_buffer buffer;
+  boost::system::error_code ec;
 
-  auto [ec, bytes] =
-      co_await ws_.async_read(buffer, boost::asio::as_tuple(use_awaitable));
+  co_await ws_.async_read(buffer, boost::asio::redirect_error(ctx_.cancelable(), ec));
 
   if (ec) {
     co_return std::make_pair(ec, std::string{});
