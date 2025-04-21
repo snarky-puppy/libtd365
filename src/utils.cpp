@@ -16,6 +16,7 @@
 #include <fstream>
 #include <ranges>
 #include <regex>
+#include <tuple>
 
 using json = nlohmann::json;
 
@@ -60,13 +61,25 @@ td_resolve_host_port(const std::string &host, const std::string &port) {
   return std::make_pair(host, port);
 }
 
+void print_exception(const std::exception_ptr &eptr) {
+  try {
+    if (eptr) std::rethrow_exception(eptr);
+  } catch (const std::exception &e) {
+    std::cout << "Exception: " << e.what() << '\n';
+  } catch (...) {
+    std::cout << "Unknown exception\n";
+  }
+}
+
+int cnt = 0;
+
 boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
 td_resolve(td_context_view ctx,
            const std::string &host, const std::string &port) {
   auto [rhost, rport] = td_resolve_host_port(host, port);
+
   boost::asio::ip::tcp::resolver resolver(ctx.executor);
-  auto endpoints = co_await resolver.async_resolve(rhost, rport,
-                                                   ctx.cancelable());
+  auto endpoints = co_await resolver.async_resolve(rhost, rport, ctx.cancelable());
   co_return endpoints;
 }
 

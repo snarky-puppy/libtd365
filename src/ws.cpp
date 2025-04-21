@@ -7,14 +7,14 @@
 
 #include "ws.h"
 
-#include <boost/lexical_cast.hpp>
-#include <iostream>
 #include "constants.h"
 #include "utils.h"
 #include <boost/asio/detached.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket/ssl.hpp>
+#include <boost/lexical_cast.hpp>
+#include <iostream>
 
 namespace net = boost::asio;
 namespace beast = boost::beast;
@@ -81,6 +81,8 @@ ws::connect(
 
   // Perform the websocket handshake
   co_await ws_.async_handshake(host, "/", use_awaitable);
+
+  co_return;
 }
 
 boost::asio::awaitable<void>
@@ -89,6 +91,7 @@ ws::close() {
   get_lowest_layer(ws_).expires_after(std::chrono::seconds(1));
   co_await ws_.async_close(boost::beast::websocket::close_code::normal,
                            boost::asio::redirect_error(ctx_.cancelable(), ec));
+  co_return;
 }
 
 boost::asio::awaitable<void>
@@ -102,6 +105,8 @@ ws::send(std::string_view message) {
   if (is_debug_enabled()) {
     std::cout << ">> " << message << std::endl;
   }
+
+  co_return;
 }
 
 boost::asio::awaitable<std::pair<boost::system::error_code, std::string> >

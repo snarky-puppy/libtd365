@@ -64,12 +64,10 @@ bool is_error_continuable(const boost::system::error_code &ec) {
   return false;
 }
 
-ws_client::ws_client(td_context_view ctx,
-                     std::function<void(tick &&)> &&tick_callback)
+ws_client::ws_client(td_context_view ctx)
   : ctx_(ctx)
     , ws_(std::make_unique<ws>(ctx))
     , auth_future_(auth_promise_.get_future())
-    , tick_callback_(std::move(tick_callback))
     , disconnect_future_(disconnect_promise_.get_future()) {
 }
 
@@ -80,27 +78,20 @@ void ws_client::start_loop(std::string host, std::string login_id, std::string t
   net::co_spawn(
     ctx_.executor,
     [this, token, login_id, host]() -> net::awaitable<void> {
-      co_await connect(host);
-      while (!ctx_.shutdown_flag) {
-        auto ec = co_await process_messages(login_id, token);
-        std::println(std::cerr, "ws_client: {} ({})", ec.message(), ec.what());
-        if (ec) {
-          if (is_error_continuable(ec)) {
-            co_await reconnect(host);
-            continue;
-          }
+      try {
+        co_await connect(host);
+        while (!ctx_.is_shutting_down()) {
+          co_await process_messages(login_id, token);
+          co_await reconnect(host);
         }
-
-        // Mark as disconnected and notify any waiting threads
-        connected_ = false;
-        disconnect_promise_.set_value();
-
-        throw boost::system::system_error(ec);
+        std::println("ws_client: message loop exiting: {}", ctx_.is_shutting_down());
+      } catch (const std::exception &e) {
+        std::println(std::cerr, "ws_client: {}", e.what());
+      } catch (...) {
+        std::println(std::cerr, "ws_client: unknown exception");
       }
     },
     net::detached);
-
-  auth_future_.wait();
 }
 
 boost::asio::awaitable<void> ws_client::close() {
@@ -133,6 +124,7 @@ boost::asio::awaitable<void> ws_client::unsubscribe(int quote_id) {
       {"action", "unsubscribe"}
     });
   }
+  co_return;
 }
 
 boost::asio::awaitable<void> ws_client::reconnect(const std::string &host) {
@@ -150,19 +142,26 @@ boost::asio::awaitable<void> ws_client::connect(const std::string &host) {
   // Create a new promise in case this is a reconnect
   disconnect_promise_ = std::promise<void>();
   disconnect_future_ = disconnect_promise_.get_future();
+
+  co_return;
 }
 
 boost::asio::awaitable<void> ws_client::send(const nlohmann::json &body) {
   co_await ws_->send(body.dump());
+  co_return;
 }
 
-boost::asio::awaitable<::boost::beast::error_code>
+boost::asio::awaitable<void>
 ws_client::process_messages(const std::string &login_id,
                             const std::string &token) {
-  while (!ctx_.shutdown_flag) {
+  while (!ctx_.is_shutting_down()) {
     auto [ec, buf] = co_await ws_->read_message();
     if (ec) {
-      co_return ec;
+      std::println(std::cerr, "ws_client: error reading message: {}", ec.message());
+      if (is_error_continuable(ec)) {
+        co_return;
+      }
+      throw ec;
     }
 
     auto msg = nlohmann::json::parse(buf);
@@ -190,7 +189,7 @@ ws_client::process_messages(const std::string &login_id,
     }
   }
   std::cout << "ws_client exiting" << std::endl;
-  co_return boost::system::error_code();
+  co_return;
 }
 
 boost::asio::awaitable<void>
@@ -242,6 +241,14 @@ ws_client::process_authentication_response(const nlohmann::json &msg) {
     });
   }
   connection_id_ = msg["cid"].get<std::string>();
+
+  // subscribe to account summary
+  co_await send({
+    {"data", "{\"SubscribeToAccountSummary\":true,\"SubscribeToAccountDetails\":true}"},
+    {"action", "options"}
+  });
+
+  // re-establish previous quote subscriptions
   for (auto quote_id: subscribed_) {
     co_await send({
       {"quoteId", quote_id},
@@ -253,12 +260,6 @@ ws_client::process_authentication_response(const nlohmann::json &msg) {
   co_return;
 }
 
-void ws_client::deliver_tick(tick &&t) {
-  if (tick_callback_) {
-    tick_callback_(std::move(t));
-  }
-}
-
 void ws_client::process_price_data(const nlohmann::json &msg) {
   const auto &data = msg["d"];
 
@@ -268,7 +269,7 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
       try {
         auto prices = it->get<std::vector<std::string> >();
         for (const auto &price: prices) {
-          deliver_tick(parse_tick(price, key.second));
+          ctx_.usr_ctx.on_tick(parse_tick(price, key.second));
         }
       } catch (const nlohmann::json::exception &e) {
         std::cerr << "Error parsing price data: " << e.what() << std::endl;
@@ -277,12 +278,16 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
   }
 }
 
+void ws_client::wait_for_auth() {
+  auth_future_.get();
+}
+
 void ws_client::process_subscribe_response(const nlohmann::json &msg) {
   auto d = msg["d"];
   assert(d["HasError"].get<bool>() == false);
   auto prices = d["Current"].get<std::vector<std::string> >();
   auto g = string_to_price_type(d["PriceGrouping"].get<std::string>());
   for (const auto &p: prices) {
-    deliver_tick(parse_tick(p, g));
+    ctx_.usr_ctx.on_tick(parse_tick(p, g));
   }
 }

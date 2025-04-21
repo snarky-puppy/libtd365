@@ -19,10 +19,23 @@
 #include <thread>
 #include <vector>
 
+#include <absl/strings/str_format.h>
+
 
 int main(int argc, char **argv) {
   try {
-    td365 client;
+    boost::asio::io_context ioc;
+
+    std::cout << "main io_context: " << &ioc << std::endl;
+
+    auto ctx = td_user_context{
+      .executor = ioc.get_executor(),
+      .tick_cb = [&](tick &&t) {
+        std::cout << t << std::endl;
+      },
+    };
+
+    td365 client(ctx);
 
     client.connect();
 
@@ -38,7 +51,8 @@ int main(int argc, char **argv) {
     auto markets = client.get_market_quote(group[0].id);
     std::ranges::for_each(
       markets, [&client](const auto &x) { client.subscribe(x.quote_id); });
-    client.main_loop([](const tick &t) { std::cout << t << std::endl; });
+
+    ioc.run();
   } catch (const std::exception &e) {
     std::cerr << "terminating: " << e.what() << std::endl;
   } catch (...) {

@@ -17,16 +17,18 @@ static const std::unordered_map<std::string_view, grouping> grouping_map = {
     {"gp", grouping::grouped},
     {"sp", grouping::sampled},
     {"dp", grouping::delayed},
-    {"c1m", grouping::candle_1m}};
+    {"c1m", grouping::candle_1m}
+};
 
 // Convert price_type enum to string
 std::string_view to_string(grouping pt);
-const std::string& to_cstring(grouping pt);
 
+const std::string &to_cstring(grouping pt);
 
 // Convert direction enum to string
 std::string_view to_string(direction dir);
-const std::string& to_cstring(direction dir);
+
+const std::string &to_cstring(direction dir);
 
 // Convert string to price_type
 grouping string_to_price_type(std::string_view key);

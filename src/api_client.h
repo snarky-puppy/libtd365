@@ -9,7 +9,8 @@
 #define API_CLIENT_H
 
 #include "http_client.h"
-#include "td365.h"
+#include "types.h"
+
 #include <boost/asio/awaitable.hpp>
 #include <string>
 #include <vector>
@@ -36,12 +37,11 @@ public:
     boost::asio::awaitable<void> close();
 
     // I think that this is some kind of keep-alive as it doesn't return anything useful.
-    void start_session_loop(std::atomic<bool> &shutdown);
+    void start_session_loop();
 
     boost::asio::awaitable<std::vector<market_group> > get_market_super_group();
 
-    boost::asio::awaitable<std::vector<market_group> >
-    get_market_group(unsigned int id);
+    boost::asio::awaitable<std::vector<market_group> > get_market_group(unsigned int id);
 
     boost::asio::awaitable<std::vector<market> > get_market_quote(unsigned int id);
 

@@ -8,119 +8,59 @@
 #ifndef TD365_H
 #define TD365_H
 
-#include <chrono>
+#include "authenticator.h"
+#include "api_client.h"
+#include "ws_client.h"
+
 #include <functional>
-#include <memory>
 #include <string>
 #include <vector>
 
-struct market_group {
-  int id;
-  std::string name;
-  bool is_super_group;
-  bool is_white_label_popular_market; // if true, not really a super group. call
-  // get_market_quote directly.
-  bool has_subscription;
-};
-
-struct market {
-  int market_id;
-  int quote_id;
-  int at_quote_at_market;
-  int exchange_id;
-  int prc_gen_fractional_price;
-  int prc_gen_decimal_places;
-  double high;
-  double low;
-  double daily_change;
-  double bid;
-  double ask;
-  double bet_per;
-  int is_gsl_percent;
-  double gsl_dis;
-  double min_close_order_dis_ticks;
-  double min_open_order_dis_ticks;
-  double display_bet_per;
-  bool is_in_portfolio;
-  bool tradable;
-  bool trade_on_web;
-  bool call_only;
-  std::string market_name;
-  std::string trade_start_time;
-  std::string currency;
-  int allow_gtds_stops;
-  bool force_open;
-  double margin;
-  bool margin_type;
-  double gsl_charge;
-  int is_gsl_charge_percent;
-  double spread;
-  int trade_rate_type;
-  double open_trade_rate;
-  double close_trade_rate;
-  double min_open_trade_rate;
-  double min_close_trade_rate;
-  double price_decimal;
-  bool subscription;
-  int super_group_id;
-};
-
-// Enum for price data types
-enum class grouping { grouped, sampled, delayed, candle_1m, _count };
-
-enum class direction { up, down, unchanged, _count };
-
-struct tick {
-  int quote_id;
-  double bid;
-  double ask;
-  double daily_change;
-  direction dir;
-  bool tradable;
-  double high;
-  double low;
-  std::string hash; // Base64 encoded hash
-  bool call_only;
-  double mid_price;
-  std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>
-  timestamp;
-  int field13; // Unknown field
-  grouping group;
-  std::chrono::nanoseconds latency{}; // difference between received timestamp
-  // and timestamp sent by server
-};
-
-// Forward declaration for stream operator
-std::ostream &operator<<(std::ostream &os, const tick &t);
-
-class td365 {
+class td365 : public std::enable_shared_from_this<td365> {
 public:
-  // Tick callback function type
-  using tick_callback = std::function<void(const tick &)>;
+    explicit td365(td_user_context &client_ctx);
 
-  explicit td365();
+    ~td365();
 
-  ~td365();
+    void connect(const std::string &username, const std::string &password,
+                 const std::string &account_id);
 
-  void connect(const std::string &username, const std::string &password,
-               const std::string &account_id) const;
+    void connect();
 
-  void connect() const;
+    void shutdown();
 
-  std::vector<market_group> get_market_super_group() const;
+    void subscribe(int quote_id);
 
-  std::vector<market_group> get_market_group(int id) const;
+    void unsubscribe(int quote_id);
 
-  std::vector<market> get_market_quote(int id) const;
+    std::vector<market_group> get_market_super_group();
 
-  void subscribe(int quote_id) const;
+    std::vector<market_group> get_market_group(int id);
 
-  // Block until the WebSocket connection is closed
-  void main_loop(const tick_callback &) const;
+    std::vector<market> get_market_quote(int id);
 
 private:
-  // td365 facades platform to prevent any boost leakage (in case app does not use boost)
-  std::unique_ptr<class platform> platform_;
+    template<typename Awaitable>
+    auto run_awaitable(Awaitable awaitable) -> typename Awaitable::value_type;
+
+    auto run_awaitable(boost::asio::awaitable<void>) -> void;
+
+    td_context ctx_;
+    std::thread io_thread_;
+
+    api_client api_client_;
+    ws_client ws_client_;
+
+    std::promise<void> connected_promise_;
+    std::future<void> connected_future_;
+    std::atomic<bool> connected_{false};
+
+    std::atomic<bool> shutdown_{false};
+    boost::asio::cancellation_signal cancel_signal;
+
+    void connect(std::function<boost::asio::awaitable<web_detail>()> f);
+
+    void start_io_thread();
 };
 
 #endif // TD365_H

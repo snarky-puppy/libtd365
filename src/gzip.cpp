@@ -6,8 +6,8 @@
  */
 
 
-#include <string>
 #include <assert.h>
+#include <string>
 #include <zlib.h>
 
 // Helper function to decompress gzip-compressed data using zlib.
@@ -16,7 +16,7 @@ std::string decompress_gzip(const std::string &compressed_data) {
     // Initialize zlib stream
     z_stream zs = {};
     zs.next_in =
-        reinterpret_cast<Bytef *>(const_cast<char *>(compressed_data.data()));
+            reinterpret_cast<Bytef *>(const_cast<char *>(compressed_data.data()));
     zs.avail_in = compressed_data.size();
 
     // Use gzip mode (MAX_WBITS + 16)
@@ -35,17 +35,17 @@ std::string decompress_gzip(const std::string &compressed_data) {
 
         result = inflate(&zs, Z_NO_FLUSH);
         assert(result != Z_STREAM_ERROR &&
-          "Zlib stream error during decompression");
+            "Zlib stream error during decompression");
 
         switch (result) {
             case Z_NEED_DICT:
                 result = Z_DATA_ERROR;
-            [[fallthrough]];
+                [[fallthrough]];
             case Z_DATA_ERROR:
             case Z_MEM_ERROR:
-              inflateEnd(&zs);
-            assert(false && "Zlib decompression error");
-            break;
+                inflateEnd(&zs);
+                assert(false && "Zlib decompression error");
+                break;
         }
 
         // Append decompressed data

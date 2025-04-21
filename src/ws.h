@@ -15,7 +15,6 @@
 #include <boost/beast.hpp>
 #include <string>
 #include <string_view>
-#include <functional>
 
 using websocket_type = boost::beast::websocket::stream<
     boost::asio::ssl::stream<boost::beast::tcp_stream> >;

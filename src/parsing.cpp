@@ -6,7 +6,7 @@
  */
 
 #include "parsing.h"
-#include "td365.h"
+#include "types.h"
 
 #include <cassert>
 #include <iomanip>
@@ -20,12 +20,23 @@ static const std::array<std::string, static_cast<size_t>(grouping::_count)> grou
   "Grouped",
   "Sampled",
   "Delayed",
-  "Candle1Minute"};
+  "Candle1Minute"
+};
+
+
+constexpr std::array<grouping, 256> faster_grouping_lookup = [] {
+  std::array<grouping, 256> arr = {};
+  arr['G'] = grouping::grouped;
+  arr['S'] = grouping::sampled;
+  arr['D'] = grouping::delayed;
+  arr['C'] = grouping::candle_1m;
+  return arr;
+}();
 
 static const std::array<std::string, static_cast<size_t>(direction::_count)> direction_lookup = {
-"up",
- "down",
- "unchanged",
+  "up",
+  "down",
+  "unchanged",
 };
 
 // Convert direction enum to string for output
@@ -33,7 +44,7 @@ std::string_view to_string(direction dir) {
   return to_cstring(dir);
 }
 
-const std::string& to_cstring(direction dir) {
+const std::string &to_cstring(direction dir) {
   return direction_lookup[static_cast<size_t>(dir)];
 }
 
@@ -42,15 +53,16 @@ std::string_view to_string(grouping pt) {
   return to_cstring(pt);
 }
 
-const std::string& to_cstring(grouping pt) {
+const std::string &to_cstring(grouping pt) {
   return grouping_lookup[static_cast<size_t>(pt)];
 }
 
 
 // String to price_type conversion helper
 grouping string_to_price_type(std::string_view key) {
-  auto it = grouping_map.find(key);
-  return (it != grouping_map.end()) ? it->second : grouping::sampled;
+  // auto it = grouping_map.find(key);
+  // return (it != grouping_map.end()) ? it->second : grouping::unknown;
+  return faster_grouping_lookup[key[0]];
 }
 
 // Parse a comma-separated price string into a tick object
@@ -94,69 +106,32 @@ tick parse_tick(const std::string &price_string, grouping price_type) {
       (windows_ticks - WINDOWS_TICKS_TO_UNIX_EPOCH) * TICKS_PER_NANOSECOND;
 
   auto timestamp_value = std::chrono::time_point<std::chrono::system_clock,
-                                                 std::chrono::nanoseconds>{
-      std::chrono::nanoseconds(unix_time_ns)};
+    std::chrono::nanoseconds>{
+    std::chrono::nanoseconds(unix_time_ns)
+  };
 
   auto now = std::chrono::system_clock::now(); // Ensure system clock is in UTC
   auto latency_value = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      now - timestamp_value);
+    now - timestamp_value);
 
   // Create tick using aggregate initialization with designated initializers
-  tick result{.quote_id = std::stoi(fields[0]),
-              .bid = std::stod(fields[1]),
-              .ask = std::stod(fields[2]),
-              .daily_change = std::stod(fields[3]),
-              .dir = dir_value,
-              .tradable = fields[5] == "1",
-              .high = std::stod(fields[6]),
-              .low = std::stod(fields[7]),
-              .hash = fields[8],
-              .call_only = fields[9] == "1",
-              .mid_price = std::stod(fields[10]),
-              .timestamp = timestamp_value,
-              .field13 = std::stoi(fields[12]),
-              .group = price_type,
-              .latency = latency_value};
+  tick result{
+    .quote_id = std::stoi(fields[0]),
+    .bid = std::stod(fields[1]),
+    .ask = std::stod(fields[2]),
+    .daily_change = std::stod(fields[3]),
+    .dir = dir_value,
+    .tradable = fields[5] == "1",
+    .high = std::stod(fields[6]),
+    .low = std::stod(fields[7]),
+    .hash = fields[8],
+    .call_only = fields[9] == "1",
+    .mid_price = std::stod(fields[10]),
+    .timestamp = timestamp_value,
+    .field13 = std::stoi(fields[12]),
+    .group = price_type,
+    .latency = latency_value
+  };
 
   return result;
 }
-
-// Stream output operator for tick objects
-std::ostream &operator<<(std::ostream &os, const tick &t) {
-  auto tp = t.timestamp;
-  auto tp_conv =
-      std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
-  std::time_t time = std::chrono::system_clock::to_time_t(tp_conv);
-
-  // Get milliseconds component
-  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                tp.time_since_epoch()) %
-            1000;
-
-  os << "Tick { "
-     << "quote_id: " << t.quote_id << ", bid: " << t.bid << ", ask: " << t.ask
-     << ", spread: " << (t.ask - t.bid) << ", change: " << t.daily_change
-     << ", dir: " << to_string(t.dir) << ", high: " << t.high
-     << ", low: " << t.low << ", mid: " << t.mid_price
-  << ", tradable: " << t.tradable
-  << ", call_only: " << t.call_only
-  << ", field13: " << t.field13
-
-     << ", time: " << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S")
-     << '.' << std::setw(3) << std::setfill('0') << ms.count()
-     << ", latency: " << (t.latency.count() / 1000000.0) << "ms"
-     << ", type: " << to_string(t.group) << " }";
-  return os;
-}
-
-#ifdef __cpp_lib_print
-// Support for std::print and std::println in C++23
-template <typename CharT>
-struct std::formatter<tick, CharT> : std::formatter<std::string, CharT> {
-  auto format(const tick &t, std::format_context &ctx) const {
-    std::ostringstream oss;
-    oss << t;
-    return std::formatter<std::string, CharT>::format(oss.str(), ctx);
-  }
-};
-#endif

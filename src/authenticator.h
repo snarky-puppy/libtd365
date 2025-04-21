@@ -16,7 +16,7 @@
 
 typedef enum { demo, prod, oneclick } account_type_t;
 
-struct account_detail {
+struct web_detail {
     splitted_url platform_url;
     account_type_t account_type;
     std::string site_host;
@@ -25,12 +25,12 @@ struct account_detail {
 };
 
 namespace authenticator {
-    boost::asio::awaitable<account_detail> authenticate(td_context_view ctx,
-                                                        std::string username,
-                                                        std::string password,
-                                                        std::string account_id);
+    boost::asio::awaitable<web_detail> authenticate(td_context_view ctx,
+                                                    std::string username,
+                                                    std::string password,
+                                                    std::string account_id);
 
-    boost::asio::awaitable<account_detail> authenticate();
+    boost::asio::awaitable<web_detail> authenticate();
 };
 
 #endif // AUTHENTICATOR_H

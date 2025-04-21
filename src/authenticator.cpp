@@ -113,9 +113,9 @@ fetch_platform_url(http_client &client, const std::string &launch_url) {
 }
 
 namespace authenticator {
-    boost::asio::awaitable<account_detail>
+    boost::asio::awaitable<web_detail>
     authenticate() {
-        co_return account_detail{
+        co_return web_detail{
             // the "?aid=1026" is required for valid login
             .platform_url = {"demo.tradedirect365.com", "/finlogin/OneClickDemo.aspx?aid=1026"},
             .account_type = oneclick,
@@ -125,7 +125,7 @@ namespace authenticator {
         };
     }
 
-    boost::asio::awaitable<account_detail>
+    boost::asio::awaitable<web_detail>
     authenticate(td_context_view ctx,
                  std::string username, std::string password,
                  std::string account_id) {
@@ -144,7 +144,7 @@ namespace authenticator {
 
         auto account = co_await select_account(client, account_id);
 
-        account_detail details;
+        web_detail details;
         details.account_type = account["accountType"] == "DEMO" ? demo : prod;
 
         details.platform_url = co_await fetch_platform_url(

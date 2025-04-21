@@ -9,7 +9,6 @@
 #define WS_CLIENT_H
 
 #include <atomic>
-#include <functional>
 #include <future>
 #include <string>
 #include <vector>
@@ -19,18 +18,11 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "execution_ctx.h"
-#include "td365.h"
 #include "ws.h"
-
-enum class grouping;
-class portal;
 
 class ws_client {
 public:
-    explicit ws_client(
-        td_context_view ctx,
-        std::function<void(tick &&)> &&tick_callback
-    );
+    explicit ws_client(td_context_view ctx);
 
     ~ws_client();
 
@@ -50,15 +42,17 @@ public:
 
     boost::asio::awaitable<void> reconnect(const std::string &host);
 
-    bool connected() { return connected_; };
+    bool connected() { return connected_; }
+
+    void wait_for_auth();
 
 private:
     void process_subscribe_response(const nlohmann::json &msg);
 
     boost::asio::awaitable<void> process_reconnect_response(const nlohmann::json &msg);
 
-    boost::asio::awaitable<::boost::beast::error_code> process_messages(const std::string &login_id,
-                                                                        const std::string &token);
+    boost::asio::awaitable<void> process_messages(const std::string &login_id,
+                                                  const std::string &token);
 
     boost::asio::awaitable<void> process_heartbeat(const nlohmann::json &msg);
 
@@ -70,10 +64,6 @@ private:
     boost::asio::awaitable<void>
     process_authentication_response(const nlohmann::json &msg);
 
-    void deliver_tick(tick &&t);
-
-    void push_data(std::vector<tick> &&);
-
     void process_price_data(const nlohmann::json &msg);
 
     td_context_view ctx_;
@@ -81,7 +71,7 @@ private:
     std::string supported_version_ = "1.0.0.6";
     std::promise<void> auth_promise_;
     std::future<void> auth_future_;
-    std::function<void(tick &&)> tick_callback_;
+    td_user_context usr_ctx_;
 
     // Connection state tracking
     std::atomic<bool> connected_{false};

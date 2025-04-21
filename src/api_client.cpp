@@ -6,7 +6,6 @@
  */
 
 #include "api_client.h"
-#include "json.h"
 #include "utils.h"
 #include <cassert>
 #include <iostream>
@@ -68,16 +67,16 @@ boost::asio::awaitable<void> api_client::close() {
     co_return;
 }
 
-void api_client::start_session_loop(std::atomic<bool> &shutdown) {
+void api_client::start_session_loop() {
     static const auto path = "/UTSAPI.asmx/UpdateClientSessionID";
     static const auto hdrs = headers({
         {"Content-Type", "application/json; charset=utf-8"},
         {"X-Requested-With", "XMLHttpRequest"}
     });
 
-    auto loop = [this, &shutdown]() -> net::awaitable<void> {
+    auto loop = [this]() -> net::awaitable<void> {
         auto timeout = std::chrono::seconds(60);
-        while (!shutdown) {
+        while (!ctx_.is_shutting_down()) {
             try {
                 if (auto resp = co_await client_->post(path, hdrs); resp.result() != http::status::ok) {
                     // can happen when using mitmproxy
@@ -108,7 +107,7 @@ void api_client::start_session_loop(std::atomic<bool> &shutdown) {
         co_return;
     };
 
-    boost::asio::co_spawn(ctx_.executor, std::move(loop), boost::asio::detached);
+    net::co_spawn(ctx_.executor, std::move(loop), boost::asio::detached);
 }
 
 boost::asio::awaitable<std::vector<market_group> >
