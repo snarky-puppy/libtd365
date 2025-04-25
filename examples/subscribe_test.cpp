@@ -26,8 +26,6 @@ int main(int argc, char **argv) {
   try {
     boost::asio::io_context ioc;
 
-    std::cout << "main io_context: " << &ioc << std::endl;
-
     auto ctx = td_user_context{
       .executor = ioc.get_executor(),
       .tick_cb = [&](tick &&t) {
@@ -52,6 +50,7 @@ int main(int argc, char **argv) {
     std::ranges::for_each(
       markets, [&client](const auto &x) { client.subscribe(x.quote_id); });
 
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard(ioc.get_executor());
     ioc.run();
   } catch (const std::exception &e) {
     std::cerr << "terminating: " << e.what() << std::endl;
