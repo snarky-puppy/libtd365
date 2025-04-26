@@ -53,6 +53,7 @@ boost::asio::awaitable<void> http_client::ensure_connected() {
 
     stream_.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
 
+#ifdef __APPLE__
     int secs = 5;
     setsockopt(stream_.lowest_layer().native_handle(), IPPROTO_TCP, TCP_KEEPALIVE, &secs, sizeof(secs));
     if (!SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str())) {
@@ -61,6 +62,7 @@ boost::asio::awaitable<void> http_client::ensure_connected() {
         static_cast<int>(ERR_get_error()), boost::asio::error::get_ssl_category()
       };
     }
+#endif
 
     co_await stream_.async_handshake(ssl::stream_base::client, redirect_error(ctx_.cancelable(), ec));
     if (ec) {
