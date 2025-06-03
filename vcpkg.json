@@ -1,0 +1,16 @@
+{
+  "name": "td365",
+  "version": "0.1.0",
+  "dependencies": [
+    "boost-system",
+    "boost-thread",
+    "boost-asio",
+    "boost-beast",
+    "boost-iostreams",
+    "boost-url",
+    "openssl",
+    "nlohmann-json",
+    "catch2",
+    "spdlog"
+  ]
+}
