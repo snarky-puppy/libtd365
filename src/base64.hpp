@@ -528,7 +528,7 @@ inline constexpr size_t decidx2{3};
                       std::is_same_v<output_value_type, signed char> ||
                       std::is_same_v<output_value_type, unsigned char> ||
                       std::is_same_v<output_value_type, std::byte>);
-        const size_t binarytextsize = end - begin;
+        const size_t binarytextsize = static_cast<size_t>(end - begin);
         const size_t encodedsize = (binarytextsize / 3 + (binarytextsize % 3 > 0))
                                    << 2;
         OutputBuffer encoded(encodedsize, detail::padding_char);
@@ -542,9 +542,9 @@ inline constexpr size_t decidx2{3};
             const uint8_t t3 = *bytes++;
             *currEncoding++ = detail::encode_table_0[t1];
             *currEncoding++ =
-                    detail::encode_table_1[((t1 & 0x03) << 4) | ((t2 >> 4) & 0x0F)];
+                    detail::encode_table_1[static_cast<std::array<char, 256>::size_type>(((t1 & 0x03) << 4) | ((t2 >> 4) & 0x0F))];
             *currEncoding++ =
-                    detail::encode_table_1[((t2 & 0x0F) << 2) | ((t3 >> 6) & 0x03)];
+                    detail::encode_table_1[static_cast<std::array<char, 256>::size_type>(((t2 & 0x0F) << 2) | ((t3 >> 6) & 0x03))];
             *currEncoding++ = detail::encode_table_1[t3];
         }
 
@@ -555,7 +555,7 @@ inline constexpr size_t decidx2{3};
             case 1: {
                 const uint8_t t1 = bytes[0];
                 *currEncoding++ = detail::encode_table_0[t1];
-                *currEncoding++ = detail::encode_table_1[(t1 & 0x03) << 4];
+                *currEncoding++ = detail::encode_table_1[static_cast<std::array<char, 256>::size_type>((t1 & 0x03) << 4)];
                 // *currEncoding++ = detail::padding_char;
                 // *currEncoding++ = detail::padding_char;
                 break;
@@ -565,8 +565,8 @@ inline constexpr size_t decidx2{3};
                 const uint8_t t2 = bytes[1];
                 *currEncoding++ = detail::encode_table_0[t1];
                 *currEncoding++ =
-                        detail::encode_table_1[((t1 & 0x03) << 4) | ((t2 >> 4) & 0x0F)];
-                *currEncoding++ = detail::encode_table_1[(t2 & 0x0F) << 2];
+                        detail::encode_table_1[static_cast<std::array<char, 256>::size_type>(((t1 & 0x03) << 4) | ((t2 >> 4) & 0x0F))];
+                *currEncoding++ = detail::encode_table_1[static_cast<std::array<char, 256>::size_type>((t2 & 0x0F) << 2)];
                 // *currEncoding++ = detail::padding_char;
                 break;
             }
@@ -605,7 +605,7 @@ inline constexpr size_t decidx2{3};
         }
 
         const size_t numPadding =
-                std::count(base64Text.rbegin(), base64Text.rbegin() + 4, '=');
+                static_cast<size_t>(std::count(base64Text.rbegin(), base64Text.rbegin() + 4, '='));
         if (numPadding > 2) {
             throw std::runtime_error{
                 "Invalid base64 encoded data - Found more than 2 padding signs"

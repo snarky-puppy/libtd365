@@ -7,34 +7,39 @@
 
 #include "cookiejar.h"
 #include "utils.h"
+#include <boost/beast/http/field.hpp>
+#include <boost/beast/http/message_fwd.hpp>
 #include <cctype>
 #include <ctime>
 #include <fstream>
+#include <http_client.h>
 #include <iomanip>
 #include <iostream>
+#include <spdlog/spdlog.h>
 #include <sstream>
 
 namespace {
-  std::string trim(const std::string &str) {
-    const auto start = str.find_first_not_of(" \t");
-    if (start == std::string::npos)
-      return "";
-    const auto end = str.find_last_not_of(" \t");
-    return str.substr(start, end - start + 1);
-  }
+std::string trim(const std::string &str) {
+  const auto start = str.find_first_not_of(" \t");
+  if (start == std::string::npos)
+    return "";
+  const auto end = str.find_last_not_of(" \t");
+  return str.substr(start, end - start + 1);
+}
 
-  // Convert a std::tm (in GMT) to time_t.
-  std::time_t convert_gmt(const std::tm &tm) {
+// Convert a std::tm (in GMT) to time_t.
+std::time_t convert_gmt(const std::tm &tm) {
 #ifdef _WIN32
   return _mkgmtime(const_cast<std::tm *>(&tm));
 #else
-    return timegm(const_cast<std::tm *>(&tm));
+  return timegm(const_cast<std::tm *>(&tm));
 #endif
-  }
+}
 } // anonymous namespace
 
-cookiejar::cookiejar(std::string path) : path_(std::move(path)) {
-  std::ifstream file(path);
+namespace td365 {
+cookiejar::cookiejar(const boost::urls::url &u) : path_(u.host() + ".cookies") {
+  std::ifstream file(path_);
   if (file) {
     std::string line;
     while (std::getline(file, line)) {
@@ -47,8 +52,8 @@ cookiejar::cookiejar(std::string path) : path_(std::move(path)) {
       } else {
         c.expiry_time =
             (expiry_time_val == 0)
-              ? std::chrono::system_clock::time_point()
-              : std::chrono::system_clock::from_time_t(expiry_time_val);
+                ? std::chrono::system_clock::time_point()
+                : std::chrono::system_clock::from_time_t(expiry_time_val);
       }
       cookies_[c.name] = c;
     }
@@ -57,17 +62,17 @@ cookiejar::cookiejar(std::string path) : path_(std::move(path)) {
 
 void cookiejar::save() const {
   std::ofstream file(path_, std::ios::trunc);
-  for (const auto &[key, c]: cookies_) {
+  for (const auto &[key, c] : cookies_) {
     std::time_t expiry_time_val =
         (c.expiry_time == std::chrono::system_clock::time_point())
-          ? 0
-          : std::chrono::system_clock::to_time_t(c.expiry_time);
+            ? 0
+            : std::chrono::system_clock::to_time_t(c.expiry_time);
     file << c.name << " " << c.value << " " << expiry_time_val << "\n";
   }
 }
 
 void cookiejar::update(const http_response &res) {
-  for (const auto &h: res) {
+  for (const auto &h : res) {
     if (h.name() == boost::beast::http::field::set_cookie) {
       std::string header_value = h.value();
       std::istringstream cookie_stream(header_value);
@@ -81,7 +86,7 @@ void cookiejar::update(const http_response &res) {
       auto equal_pos = token.find('=');
       if (equal_pos == std::string::npos) {
         std::cerr << "Malformed cookie pair in header: " << header_value
-            << "\n";
+                  << "\n";
         continue;
       }
       cookie cookie_obj;
@@ -108,18 +113,16 @@ void cookiejar::update(const http_response &res) {
                                      std::chrono::seconds(max_age);
           } catch (...) {
             std::cerr << "Malformed Max-Age in header: " << header_value
-                << "\n";
+                      << "\n";
           }
         } else if (attr_name == "expires") {
           std::tm tm = {};
           auto parsed = false;
 
-          std::vector formats = {
-            "%a, %d %b %Y %H:%M:%S GMT",
-            "%a, %d-%b-%Y %H:%M:%S GMT"
-          };
+          std::vector formats = {"%a, %d %b %Y %H:%M:%S GMT",
+                                 "%a, %d-%b-%Y %H:%M:%S GMT"};
 
-          for (const auto &format: formats) {
+          for (const auto &format : formats) {
             std::istringstream date_stream(attr_value);
             date_stream >> std::get_time(&tm, format);
             if (!date_stream.fail()) {
@@ -129,7 +132,7 @@ void cookiejar::update(const http_response &res) {
           }
           if (!parsed) {
             std::cerr << "Malformed Expires date in header: " << header_value
-                << "\n";
+                      << "\n";
           } else {
             std::time_t tt = convert_gmt(tm);
             cookie_obj.expiry_time = std::chrono::system_clock::from_time_t(tt);
@@ -142,7 +145,7 @@ void cookiejar::update(const http_response &res) {
   }
 }
 
-void cookiejar::apply(request &req) {
+void cookiejar::apply(http_request &req) {
   auto now = std::chrono::system_clock::now();
   // Remove expired cookies (for cookies with a non-default expiry_time)
   for (auto it = cookies_.begin(); it != cookies_.end();) {
@@ -155,7 +158,7 @@ void cookiejar::apply(request &req) {
   }
   // Combine valid cookies into a single "Cookie" header.
   std::string cookie_str;
-  for (const auto &pair: cookies_) {
+  for (const auto &pair : cookies_) {
     if (!cookie_str.empty())
       cookie_str += "; ";
     cookie_str += pair.second.name + "=" + pair.second.value;
@@ -165,6 +168,14 @@ void cookiejar::apply(request &req) {
     req.insert(boost::beast::http::field::cookie, cookie_str);
 }
 
-cookiejar::cookie cookiejar::get(const std::string &ots) const {
-  return cookies_.at(ots);
+cookiejar::cookie cookiejar::get(const std::string &name) const {
+  try {
+    return cookies_.at(name);
+  } catch (const std::out_of_range &) {
+    spdlog::error("Cookie not found: {}", name);
+  } catch (...) {
+    spdlog::error("Unknown error");
+  }
+  return {};
 }
+} // namespace td365

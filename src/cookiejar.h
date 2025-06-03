@@ -5,23 +5,24 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#ifndef COOKIEJAR_H
-#define COOKIEJAR_H
+#pragma once
 
 #include "http.h"
+#include <boost/url.hpp>
 #include <chrono>
 #include <string>
 #include <unordered_map>
 
+namespace td365 {
 class cookiejar {
 public:
-  explicit cookiejar(std::string path);
+  explicit cookiejar(const boost::urls::url &);
 
   void save() const;
 
   void update(const http_response &res);
 
-  void apply(request &req);
+  void apply(http_request &req);
 
   struct cookie {
     std::string name;
@@ -30,11 +31,10 @@ public:
     std::chrono::system_clock::time_point expiry_time;
   };
 
-  cookie get(const std::string &ots) const;
+  cookie get(const std::string &name) const;
 
 private:
   std::string path_;
   std::unordered_map<std::string, cookie> cookies_;
 };
-
-#endif // COOKIEJAR_H
+} // namespace td365

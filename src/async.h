@@ -5,13 +5,11 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
+#ifndef ASYNC_H
+#define ASYNC_H
 
-#ifndef GZIP_H
-#define GZIP_H
+#include <boost/asio.hpp>
 
-#include <string>
+template <typename T> using awaitable = boost::asio::awaitable<T>;
 
-std::string decompress_gzip(const std::string &compressed_data);
-
-
-#endif //GZIP_H
+#endif // ASYNC_H

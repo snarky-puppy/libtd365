@@ -7,10 +7,18 @@
 
 #include "utils.h"
 #include "base64.hpp"
+#include "http_client.h"
 #include "nlohmann/json.hpp"
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/beast/core/buffers_to_string.hpp>
+#include <boost/beast/core/detail/base64.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/device/array.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/url/url.hpp>
 #include <charconv>
 #include <execution_ctx.h>
 #include <fstream>
@@ -18,13 +26,16 @@
 #include <regex>
 #include <tuple>
 
+namespace td365 {
 using json = nlohmann::json;
+namespace beast = boost::beast;
 
 boost::asio::ssl::context &ssl_ctx() {
-  static auto ctx =
-      [&]() {
-        auto rv = boost::asio::ssl::context(boost::asio::ssl::context::tlsv12_client);
-        SSL_CTX_set_keylog_callback(rv.native_handle(), [](const SSL *, const char *line) {
+  static auto ctx = [&]() {
+    auto rv =
+        boost::asio::ssl::context(boost::asio::ssl::context::tlsv12_client);
+    SSL_CTX_set_keylog_callback(
+        rv.native_handle(), [](const SSL *, const char *line) {
           static const auto fpath = std::getenv("SSLKEYLOGFILE");
           if (!fpath) {
             return;
@@ -32,12 +43,11 @@ boost::asio::ssl::context &ssl_ctx() {
           std::ofstream out(fpath, std::ios::app);
           out << line << std::endl;
         });
-        rv.set_default_verify_paths();
-        return rv;
-      }();
+    rv.set_default_verify_paths();
+    return rv;
+  }();
   return ctx;
 }
-
 
 std::string now_utc() {
   boost::posix_time::ptime now =
@@ -45,42 +55,15 @@ std::string now_utc() {
   return boost::posix_time::to_iso_string(now);
 }
 
-std::pair<std::string, std::string>
-td_resolve_host_port(const std::string &host, const std::string &port) {
-  if (auto *env = std::getenv("PROXY")) {
-    std::string_view proxy{env};
-    auto pos = proxy.find(':');
-    if (pos != std::string_view::npos) {
-      return std::make_pair(std::string(
-                              proxy.substr(0, pos)),
-                            std::string(proxy.substr(pos + 1)));
-    } else {
-      return std::make_pair(std::string(proxy), "8080");
-    }
-  }
-  return std::make_pair(host, port);
-}
-
 void print_exception(const std::exception_ptr &eptr) {
   try {
-    if (eptr) std::rethrow_exception(eptr);
+    if (eptr)
+      std::rethrow_exception(eptr);
   } catch (const std::exception &e) {
     std::cout << "Exception: " << e.what() << '\n';
   } catch (...) {
     std::cout << "Unknown exception\n";
   }
-}
-
-int cnt = 0;
-
-boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
-td_resolve(td_context_view ctx,
-           const std::string &host, const std::string &port) {
-  auto [rhost, rport] = td_resolve_host_port(host, port);
-
-  boost::asio::ip::tcp::resolver resolver(ctx.executor);
-  auto endpoints = co_await resolver.async_resolve(rhost, rport, ctx.cancelable());
-  co_return endpoints;
 }
 
 json extract_jwt_payload(const json &jwt) {
@@ -104,20 +87,17 @@ json extract_jwt_payload(const json &jwt) {
   return rv; // see NVRO
 }
 
-std::string_view trim(const std::string &body) {
-  static const char *whitespace = " \t\n\r\f\v";
-  std::string_view trimmed{body};
-  trimmed.remove_prefix(trimmed.find_first_not_of(whitespace));
-  trimmed.remove_suffix(trimmed.find_last_not_of(whitespace));
-  return trimmed;
+std::string get_http_body(http_client::response const &res) {
+  auto body = beast::buffers_to_string(res.body().data());
+  if (res[beast::http::field::content_encoding] == "gzip") {
+    auto const src = boost::iostreams::array_source{body.data(), body.size()};
+    auto is = boost::iostreams::filtering_istream{};
+    auto os = std::stringstream{};
+    is.push(boost::iostreams::gzip_decompressor{});
+    is.push(src);
+    boost::iostreams::copy(is, os);
+    body = os.str();
+  }
+  return body;
 }
-
-splitted_url split_url(const std::string &url) {
-  // parse out protocol, hostname, and the path and query
-  const static std::regex re(R"(^https://([^/]*)(.*))");
-  std::smatch m;
-  assert(std::regex_match(url, m, re));
-  auto host = m[1].str();
-  auto path = m[2].str();
-  return splitted_url{host, path};
-}
+} // namespace td365

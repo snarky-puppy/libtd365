@@ -13,24 +13,17 @@
 #include "td365.h"
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <iostream>
-#include <string>
-#include <thread>
+#include <spdlog/spdlog.h>
 #include <vector>
 
-#include <absl/strings/str_format.h>
-
-
-int main(int argc, char **argv) {
+int main(int, char **) {
   try {
     boost::asio::io_context ioc;
+    spdlog::set_level(spdlog::level::debug);
 
-    auto ctx = td_user_context{
-      .executor = ioc.get_executor(),
-      .tick_cb = [&](tick &&t) {
-        std::cout << t << std::endl;
-      },
+    auto ctx = user_callbacks{
+        .tick_cb = [&](tick &&t) { std::cout << t << std::endl; },
     };
 
     td365 client(ctx);
@@ -48,9 +41,10 @@ int main(int argc, char **argv) {
 
     auto markets = client.get_market_quote(group[0].id);
     std::ranges::for_each(
-      markets, [&client](const auto &x) { client.subscribe(x.quote_id); });
+        markets, [&client](const auto &x) { client.subscribe(x.quote_id); });
 
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard(ioc.get_executor());
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
+        work_guard(ioc.get_executor());
     ioc.run();
   } catch (const std::exception &e) {
     std::cerr << "terminating: " << e.what() << std::endl;

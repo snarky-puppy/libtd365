@@ -5,16 +5,15 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#ifndef HTTP_H
-#define HTTP_H
+
+#pragma once
 
 #include <boost/asio.hpp>
 #include <boost/beast/http.hpp>
-#include <utility>
 
-using headers = std::unordered_multimap<std::string, std::string>;
-using http_response = boost::beast::http::response<boost::beast::http::string_body>;
-using response = http_response;
-using request = boost::beast::http::request<boost::beast::http::string_body>;
-
-#endif // HTTP_H
+namespace td365 {
+using http_response =
+    boost::beast::http::response<boost::beast::http::dynamic_body>;
+using http_request = boost::beast::http::request<boost::beast::http::string_body>;
+using http_headers = std::unordered_multimap<std::string_view, std::string_view>;
+}

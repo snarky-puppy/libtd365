@@ -4,12 +4,13 @@
  * This file is part of the td365 project.
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
+#pragma once
 
-#ifndef HTTP_CLIENT_H
-#define HTTP_CLIENT_H
-
+#include <chrono>
+#include <map>
 #include <string>
 
+#include "http.h"
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>
@@ -17,45 +18,50 @@
 #include <boost/beast/ssl.hpp>
 
 #include "cookiejar.h"
-#include "execution_ctx.h"
-#include "http.h"
 
-class http_client {
-public:
-    http_client(td_context_view ctx, std::string host, std::string port = "443");
+#include "boost/beast/http/dynamic_body.hpp"
+#include "boost/beast/http/message.hpp"
+#include "boost/url/url.hpp"
 
-    boost::asio::awaitable<response> get(const std::string &path);
+namespace td365 {
 
-    boost::asio::awaitable<response> post(const std::string &path,
-                                          const std::string &content_type,
-                                          const std::string &body);
+struct http_client {
 
-    boost::asio::awaitable<response> post(const std::string &path,
-                                          const headers &headers);
+  http_client(boost::urls::url const &url);
+  virtual ~http_client() = default;
+  http_client(const http_client &) = delete;
+  http_client(http_client &&) = delete;
+  http_client &operator=(const http_client &) = delete;
+  http_client &operator=(http_client &&) = delete;
 
-    void set_default_headers(headers headers) {
-        default_headers_ = std::move(headers);
-    };
-    headers &default_headers() { return default_headers_; };
+  boost::asio::awaitable<http_response> get(boost::urls::url const &url);
 
-    const cookiejar &jar() const { return jar_; }
+  boost::asio::awaitable<http_response> post(boost::urls::url const &url);
+  boost::asio::awaitable<http_response> post(boost::urls::url const &url,
+                                             std::string const &body);
+
+  void set_default_headers(http_headers headers) {
+    default_headers_ = std::move(headers);
+  };
+  http_headers &default_headers() { return default_headers_; };
+
+  const cookiejar &jar() const { return jar_; }
 
 private:
-    boost::asio::awaitable<void> ensure_connected();
+  boost::asio::awaitable<void> ensure_connected();
 
-    void set_req_defaults(
-        boost::beast::http::request<boost::beast::http::string_body> &req);
+  std::map<std::string, std::string> set_req_defaults(
+      boost::beast::http::request<boost::beast::http::string_body> &req);
 
-    boost::asio::awaitable<response> send(request req, headers headers);
+  boost::asio::awaitable<http_response>
+  send(boost::beast::http::verb verb, boost::urls::url const &url,
+       http_headers const &headers, std::optional<std::string> const &body);
 
-    td_context_view ctx_;
-    std::string host_;
-    std::string port_;
-    using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
-    stream_t stream_;
+  boost::urls::url url_;
+  using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
+  std::unique_ptr<stream_t> stream_;
 
-    headers default_headers_;
-    cookiejar jar_;
+  cookiejar jar_;
+  http_headers default_headers_;
 };
-
-#endif // HTTP_CLIENT_H
+} // namespace td365

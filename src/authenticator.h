@@ -5,8 +5,7 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#ifndef AUTHENTICATOR_H
-#define AUTHENTICATOR_H
+#pragma once
 
 #include <execution_ctx.h>
 
@@ -14,23 +13,22 @@
 #include <boost/asio/awaitable.hpp>
 #include <string>
 
+namespace td365 {
 typedef enum { demo, prod, oneclick } account_type_t;
 
 struct web_detail {
-    splitted_url platform_url;
-    account_type_t account_type;
-    std::string site_host;
-    std::string api_host;
-    std::string sock_host;
+  boost::urls::url platform_url;
+  account_type_t account_type;
+  std::string site_host;
+  std::string api_host;
+  std::string sock_host;
 };
 
 namespace authenticator {
-    boost::asio::awaitable<web_detail> authenticate(td_context_view ctx,
-                                                    std::string username,
-                                                    std::string password,
-                                                    std::string account_id);
+boost::asio::awaitable<web_detail> authenticate(std::string username,
+                                                std::string password,
+                                                std::string account_id);
 
-    boost::asio::awaitable<web_detail> authenticate();
-};
-
-#endif // AUTHENTICATOR_H
+boost::asio::awaitable<web_detail> authenticate();
+}; // namespace authenticator
+} // namespace td365
