@@ -6,29 +6,29 @@
  */
 
 #include "http_client.h"
+
+#include "constants.h"
+#include "utils.h"
 #include "verify.h"
 
-#include "boost/asio/awaitable.hpp"
-#include "boost/asio/co_spawn.hpp"
-#include "boost/asio/io_context.hpp"
-#include "boost/asio/ssl.hpp"
-#include "boost/beast/core.hpp"
-#include "boost/beast/http.hpp"
-#include "boost/beast/http/dynamic_body.hpp"
-#include "boost/beast/ssl/ssl_stream.hpp"
-#include "boost/beast/version.hpp"
-#include "boost/iostreams/copy.hpp"
-#include "boost/iostreams/filter/gzip.hpp"
-#include "boost/iostreams/filtering_stream.hpp"
-#include "boost/iostreams/filtering_streambuf.hpp"
-#include "boost/url/url.hpp"
-
-#include <__filesystem/path.h>
-#include <constants.h>
-#include <utils.h>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/http/dynamic_body.hpp>
+#include <boost/beast/ssl/ssl_stream.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/url/url.hpp>
 
 namespace td365 {
 
+namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 using tcp = net::ip::tcp;
@@ -38,124 +38,131 @@ namespace ssl = boost::asio::ssl;
 constexpr auto const kBodySizeLimit = 128U * 1024U * 1024U; // 128 M
 
 constexpr auto create_default_headers() {
-  http_headers hdrs;
-  hdrs.emplace(to_string(http::field::user_agent), UserAgent);
-  hdrs.emplace(to_string(http::field::accept), "*/*");
-  hdrs.emplace(to_string(http::field::accept_language), "en-US,en;q=0.5");
-  hdrs.emplace(to_string(http::field::content_type),
-               "application/json; charset=utf-8");
-  hdrs.emplace(to_string(http::field::accept_encoding), "gzip");
-  hdrs.emplace(to_string(http::field::connection), "keep-alive");
-  return hdrs;
+    http_headers hdrs;
+    hdrs.emplace(to_string(http::field::user_agent), UserAgent);
+    hdrs.emplace(to_string(http::field::accept), "*/*");
+    hdrs.emplace(to_string(http::field::accept_language), "en-US,en;q=0.5");
+    hdrs.emplace(to_string(http::field::content_type),
+                 "application/json; charset=utf-8");
+    hdrs.emplace(to_string(http::field::accept_encoding), "gzip");
+    hdrs.emplace(to_string(http::field::connection), "keep-alive");
+    return hdrs;
 }
 
-http_client::http_client(boost::urls::url const &url)
-    : url_(url), jar_(url), default_headers_(create_default_headers()) {
-  default_headers_.emplace(to_string(http::field::host), url.host());
+http_client::http_client(boost::asio::any_io_executor ex,
+                         const boost::urls::url &url)
+    : stream_(ex, ssl_ctx()), url_(url), jar_(url_),
+      default_headers_(create_default_headers()) {
+    default_headers_.emplace(to_string(http::field::host), url_.host());
 }
 
 awaitable<void> http_client::ensure_connected() {
-  if (!stream_) {
-    auto executor = co_await boost::asio::this_coro::executor;
-    stream_ = std::make_unique<stream_t>(executor, ssl_ctx());
-  }
-  if (!stream_->lowest_layer().is_open()) {
-    auto executor = co_await boost::asio::this_coro::executor;
-    auto resolver = boost::asio::ip::tcp::resolver{executor};
+    if (!stream_.lowest_layer().is_open()) {
+        auto executor = co_await boost::asio::this_coro::executor;
+        auto resolver = boost::asio::ip::tcp::resolver{executor};
 
-    auto const host = url_.host();
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
-    if (!SSL_set_tlsext_host_name(stream_->native_handle(),
-                                  const_cast<char *>(host.c_str()))) {
-      throw boost::system::system_error{
-          {static_cast<int>(::ERR_get_error()),
-           boost::asio::error::get_ssl_category()}};
+        auto const host = url_.host();
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+        if (!SSL_set_tlsext_host_name(stream_.native_handle(),
+                                      const_cast<char *>(host.c_str()))) {
+            throw boost::system::system_error{
+                {static_cast<int>(::ERR_get_error()),
+                 boost::asio::error::get_ssl_category()}};
+        }
+
+        auto url = boost::urls::url{url_};
+        if (auto *env = std::getenv("PROXY")) {
+            url = boost::urls::url{env};
+        }
+
+        auto result = co_await resolver.async_resolve(
+            url.host(), url.has_port() ? url.port() : "443",
+            boost::asio::use_awaitable);
+        co_await beast::get_lowest_layer(stream_).async_connect(
+            *result.begin(), boost::asio::use_awaitable);
+        co_await stream_.async_handshake(ssl::stream_base::client);
     }
 
-    auto url = boost::urls::url{url_};
-    if (auto *env = std::getenv("PROXY")) {
-      url = boost::urls::url{env};
-    }
-
-    auto const results = co_await resolver.async_resolve(
-        url.host(), url.has_port() ? url.port() : "443");
-    co_await beast::get_lowest_layer(*stream_).async_connect(results);
-    co_await stream_->async_handshake(ssl::stream_base::client);
-  }
-
-  co_return;
+    co_return;
 }
 
 boost::asio::awaitable<http_response>
 http_client::send(boost::beast::http::verb verb, boost::urls::url const &url,
                   http_headers const &headers,
                   std::optional<std::string> const &body) {
-  co_await ensure_connected();
+    co_await ensure_connected();
+    auto ex = co_await boost::asio::this_coro::executor;
 
-  auto req = http::request<http::string_body>{verb, url.encoded_target(), 11};
-  req.set(http::field::accept_encoding, "gzip"); // ensure this is set
+    auto req = http::request<http::string_body>{verb, url.encoded_target(), 11};
+    req.set(http::field::accept_encoding, "gzip"); // ensure this is set
 
-  if (!default_headers().empty()) {
-    for (const auto &[name, value] : default_headers()) {
-      req.insert(name, value);
+    if (!default_headers_.empty()) {
+        for (const auto &[name, value] : default_headers_) {
+            const auto a = name;
+            const auto b = value;
+            std::println("{}", a);
+            std::println("{}", b);
+            req.insert(a, b);
+        }
     }
-  }
 
-  if (!headers.empty()) {
-    for (const auto &[name, value] : headers) {
-      req.insert(name, value);
+    if (!headers.empty()) {
+        for (const auto &[name, value] : headers) {
+            req.insert(name, value);
+        }
     }
-  }
 
-  jar_.apply(req);
+    jar_.apply(req);
 
-  if (body) {
-    req.body() = *body;
-    req.prepare_payload();
-  }
-
-  try {
-    co_await http::async_write(stream_, req, boost::asio::use_awaitable);
-
-    auto p = http::response_parser<http::dynamic_body>{};
-    p.eager(true);
-    p.body_limit(kBodySizeLimit);
-
-    auto buffer = beast::flat_buffer{};
-    co_await http::async_read(stream_, buffer, p, boost::asio::use_awaitable);
-
-    auto response = p.release();
-
-    jar_.update(response);
-
-    co_return response;
-
-  } catch (const boost::beast::error_code &ec) {
-    if (ec == http::error::end_of_stream) {
-      stream_->lowest_layer().close();
-      auto ex = co_await boost::asio::this_coro::executor;
-      stream_ = std::make_unique<stream_t>(ex, ssl_ctx());
-    } else {
-      spdlog::error("http_client::send: {}", ec.message());
+    if (body) {
+        req.body() = *body;
+        req.prepare_payload();
     }
-    throw ec;
-  }
-  co_return {boost::beast::http::status::unknown, 11};
+
+    try {
+        co_await http::async_write(stream_, req, boost::asio::use_awaitable);
+
+        auto p = http::response_parser<http::dynamic_body>{};
+        p.eager(true);
+        p.body_limit(kBodySizeLimit);
+
+        auto buffer = beast::flat_buffer{};
+        co_await http::async_read(stream_, buffer, p,
+                                  boost::asio::use_awaitable);
+
+        auto response = p.release();
+
+        jar_.update(response);
+
+        co_return response;
+
+    } catch (const boost::beast::error_code &ec) {
+        if (ec == http::error::end_of_stream) {
+            stream_.lowest_layer().close();
+            stream_ = stream_t(ex, ssl_ctx());
+        } else {
+            spdlog::error("http_client::send: {}", ec.message());
+        }
+        throw ec;
+    }
+
+    http_response resp{boost::beast::http::status::unknown, 11};
+    co_return resp;
 }
 
 awaitable<http_response> http_client::get(boost::urls::url const &url) {
-  return send(http::verb::get, url, {}, std::nullopt);
+    return send(http::verb::get, url, {}, std::nullopt);
 }
 
 awaitable<http_response> http_client::post(boost::urls::url const &url) {
-  return send(http::verb::post, url, {}, std::nullopt);
+    return send(http::verb::post, url, {}, std::nullopt);
 }
 
 awaitable<http_response> http_client::post(boost::urls::url const &url,
                                            std::string const &body) {
-  return send(http::verb::post, url,
-              {{to_string(http::field::content_type), "application/json"}},
-              body);
+    return send(http::verb::post, url,
+                {{to_string(http::field::content_type), "application/json"}},
+                body);
 }
 
 } // namespace td365

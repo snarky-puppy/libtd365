@@ -5,28 +5,27 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-
 #pragma once
 
-#include <spdlog/spdlog.h>
-#include <string>
-#include <stdexcept>
 #include <format>
+#include <spdlog/spdlog.h>
+#include <stdexcept>
+#include <string>
 
 namespace td365 {
 
 template <typename... FmtArgs>
-std::runtime_error fail(std::string_view msg, FmtArgs... args) {
-  spdlog::error(msg, std::forward<FmtArgs>(args)...);
-
-  return std::runtime_error{
-    std::format(msg, std::forward<FmtArgs>(args)...)};
+std::runtime_error fail(std::format_string<FmtArgs...> fmt, FmtArgs... args) {
+    std::string msg = std::format(fmt, std::forward<FmtArgs>(args)...);
+    spdlog::error(msg);
+    return std::runtime_error{msg};
 }
 
 template <typename... FmtArgs>
-void verify(bool condition, std::string_view msg, FmtArgs... args) {
-  if (!condition) {
-    [[unlikely]] throw fail(msg, std::forward<FmtArgs>(args)...);
-  }
+void verify(bool condition, std::format_string<FmtArgs...> fmt,
+            FmtArgs... args) {
+    if (!condition) {
+        [[unlikely]] throw fail(fmt, std::forward<FmtArgs>(args)...);
+    }
 }
-}
+} // namespace td365

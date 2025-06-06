@@ -5,20 +5,16 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
+#pragma once
 
-#ifndef BOOST_ALIAS_H
-#define BOOST_ALIAS_H
-
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
 
 namespace beast = boost::beast;
-namespace http  = beast::http;
-namespace asio  = boost::asio;
-namespace ssl   = boost::asio::ssl;
+namespace http = beast::http;
+namespace asio = boost::asio;
+namespace ssl = boost::asio::ssl;
 using tcp = asio::ip::tcp;
 using boost::asio::awaitable;
-
-#endif //BOOST_ALIAS_H

@@ -7,9 +7,8 @@
 
 #pragma once
 
-#include <execution_ctx.h>
-
 #include "utils.h"
+
 #include <boost/asio/awaitable.hpp>
 #include <string>
 
@@ -17,11 +16,11 @@ namespace td365 {
 typedef enum { demo, prod, oneclick } account_type_t;
 
 struct web_detail {
-  boost::urls::url platform_url;
-  account_type_t account_type;
-  std::string site_host;
-  std::string api_host;
-  std::string sock_host;
+    boost::urls::url platform_url;
+    account_type_t account_type;
+    boost::urls::url site_host;
+    boost::urls::url api_host;
+    boost::urls::url sock_host;
 };
 
 namespace authenticator {

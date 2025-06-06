@@ -5,20 +5,20 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#ifndef PARSING_H
-#define PARSING_H
+#pragma once
 
 #include "td365.h"
+
 #include <optional>
 #include <string_view>
 #include <unordered_map>
 
+namespace td365 {
 static const std::unordered_map<std::string_view, grouping> grouping_map = {
     {"gp", grouping::grouped},
     {"sp", grouping::sampled},
     {"dp", grouping::delayed},
-    {"c1m", grouping::candle_1m}
-};
+    {"c1m", grouping::candle_1m}};
 
 // Convert price_type enum to string
 std::string_view to_string(grouping pt);
@@ -37,5 +37,4 @@ grouping string_to_price_type(std::string_view key);
 // Format:
 // "quote_id,bid,ask,daily_change,direction,field6,high,low,hash,field10,mid_price,timestamp,field13"
 tick parse_tick(const std::string &price_string, grouping price_type);
-
-#endif // PARSING_H
+} // namespace td365

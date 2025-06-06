@@ -5,38 +5,33 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#ifndef WS_H
-#define WS_H
-
-#include <execution_ctx.h>
+#pragma once
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
+#include <boost/url/url_view.hpp>
 #include <string>
 #include <string_view>
 
+namespace td365 {
 using websocket_type = boost::beast::websocket::stream<
-    boost::asio::ssl::stream<boost::beast::tcp_stream> >;
+    boost::asio::ssl::stream<boost::beast::tcp_stream>>;
 
 class ws {
-public:
-    explicit ws(td_context_view ctx);
+  public:
+    explicit ws();
 
-    boost::asio::awaitable<void> connect(
-        const std::string &host,
-        const std::string &port);
+    boost::asio::awaitable<void> connect(boost::urls::url_view);
 
     boost::asio::awaitable<void> close();
 
     boost::asio::awaitable<void> send(std::string_view message);
 
-    boost::asio::awaitable<std::pair<boost::system::error_code, std::string> >
+    boost::asio::awaitable<std::pair<boost::system::error_code, std::string>>
     read_message();
 
-private:
-    td_context_view ctx_;
-    websocket_type ws_;
+  private:
+    std::unique_ptr<websocket_type> ws_;
 };
-
-#endif // WS_H
+} // namespace td365

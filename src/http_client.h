@@ -6,62 +6,57 @@
  */
 #pragma once
 
-#include <chrono>
-#include <map>
-#include <string>
-
+#include "boost/beast/http/dynamic_body.hpp"
+#include "boost/beast/http/message.hpp"
+#include "boost/url/url.hpp"
+#include "cookiejar.h"
 #include "http.h"
+
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
-
-#include "cookiejar.h"
-
-#include "boost/beast/http/dynamic_body.hpp"
-#include "boost/beast/http/message.hpp"
-#include "boost/url/url.hpp"
+#include <chrono>
+#include <map>
+#include <string>
 
 namespace td365 {
 
 struct http_client {
 
-  http_client(boost::urls::url const &url);
-  virtual ~http_client() = default;
-  http_client(const http_client &) = delete;
-  http_client(http_client &&) = delete;
-  http_client &operator=(const http_client &) = delete;
-  http_client &operator=(http_client &&) = delete;
+    http_client(boost::asio::any_io_executor, const boost::urls::url &);
+    virtual ~http_client() = default;
+    http_client(const http_client &) = delete;
+    http_client(http_client &&) = delete;
+    http_client &operator=(const http_client &) = delete;
+    http_client &operator=(http_client &&) = delete;
 
-  boost::asio::awaitable<http_response> get(boost::urls::url const &url);
+    boost::asio::awaitable<http_response> get(boost::urls::url const &url);
 
-  boost::asio::awaitable<http_response> post(boost::urls::url const &url);
-  boost::asio::awaitable<http_response> post(boost::urls::url const &url,
-                                             std::string const &body);
+    boost::asio::awaitable<http_response> post(boost::urls::url const &url);
+    boost::asio::awaitable<http_response> post(boost::urls::url const &url,
+                                               std::string const &body);
 
-  void set_default_headers(http_headers headers) {
-    default_headers_ = std::move(headers);
-  };
-  http_headers &default_headers() { return default_headers_; };
+    http_headers &default_headers() { return default_headers_; };
 
-  const cookiejar &jar() const { return jar_; }
+    const cookiejar &jar() const { return jar_; }
 
-private:
-  boost::asio::awaitable<void> ensure_connected();
+  private:
+    boost::asio::awaitable<void> ensure_connected();
 
-  std::map<std::string, std::string> set_req_defaults(
-      boost::beast::http::request<boost::beast::http::string_body> &req);
+    std::map<std::string, std::string> set_req_defaults(
+        boost::beast::http::request<boost::beast::http::string_body> &req);
 
-  boost::asio::awaitable<http_response>
-  send(boost::beast::http::verb verb, boost::urls::url const &url,
-       http_headers const &headers, std::optional<std::string> const &body);
+    boost::asio::awaitable<http_response>
+    send(boost::beast::http::verb verb, boost::urls::url const &url,
+         http_headers const &headers, std::optional<std::string> const &body);
 
-  boost::urls::url url_;
-  using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
-  std::unique_ptr<stream_t> stream_;
+    using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
+    stream_t stream_;
+    const boost::urls::url url_;
 
-  cookiejar jar_;
-  http_headers default_headers_;
+    cookiejar jar_;
+    http_headers default_headers_;
 };
 } // namespace td365
