@@ -31,7 +31,7 @@ namespace td365 {
 
 namespace {
 std::string extract_ots(const boost::urls::url &u) {
-    constexpr std::string_view key = "ots=";
+    constexpr std::string_view key = "ots";
     auto iter = u.encoded_params().find(key);
     verify(iter != u.encoded_params().end(),
            "extract_ots: missing parameter in '{}'", u.buffer());
@@ -104,7 +104,7 @@ auto rest_api::open_client(boost::urls::url u, int depth)
 
 auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
     auto ex = co_await net::this_coro::executor;
-    client_ = std::make_unique<http_client>(ex, url);
+    client_ = std::make_unique<http_client>(ex, url.host());
     auto [ots, login_id] = co_await open_client(url);
     auto token = client_->jar().get(ots);
 

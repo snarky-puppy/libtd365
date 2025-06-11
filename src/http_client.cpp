@@ -49,11 +49,14 @@ constexpr auto create_default_headers() {
     return hdrs;
 }
 
-http_client::http_client(boost::asio::any_io_executor ex,
-                         const boost::urls::url &url)
-    : stream_(ex, ssl_ctx()), url_(url), jar_(url_),
+const auto no_headers = http_headers{};
+const auto application_json_headers =
+    http_headers{{to_string(http::field::content_type), "application/json"}};
+
+http_client::http_client(boost::asio::any_io_executor ex, std::string host)
+    : stream_(ex, ssl_ctx()), host_(std::move(host)), jar_(host_ + ".cookies"),
       default_headers_(create_default_headers()) {
-    default_headers_.emplace(to_string(http::field::host), url_.host());
+    default_headers_.emplace(to_string(http::field::host), host_);
 }
 
 awaitable<void> http_client::ensure_connected() {
@@ -61,16 +64,15 @@ awaitable<void> http_client::ensure_connected() {
         auto executor = co_await boost::asio::this_coro::executor;
         auto resolver = boost::asio::ip::tcp::resolver{executor};
 
-        auto const host = url_.host();
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         if (!SSL_set_tlsext_host_name(stream_.native_handle(),
-                                      const_cast<char *>(host.c_str()))) {
+                                      const_cast<char *>(host_.c_str()))) {
             throw boost::system::system_error{
                 {static_cast<int>(::ERR_get_error()),
                  boost::asio::error::get_ssl_category()}};
         }
 
-        auto url = boost::urls::url{url_};
+        auto url = boost::urls::url{std::string{"https://"} + host_};
         if (auto *env = std::getenv("PROXY")) {
             url = boost::urls::url{env};
         }
@@ -98,11 +100,7 @@ http_client::send(boost::beast::http::verb verb, boost::urls::url const &url,
 
     if (!default_headers_.empty()) {
         for (const auto &[name, value] : default_headers_) {
-            const auto a = name;
-            const auto b = value;
-            std::println("{}", a);
-            std::println("{}", b);
-            req.insert(a, b);
+            req.insert(name, value);
         }
     }
 
@@ -150,19 +148,20 @@ http_client::send(boost::beast::http::verb verb, boost::urls::url const &url,
     co_return resp;
 }
 
-awaitable<http_response> http_client::get(boost::urls::url const &url) {
-    return send(http::verb::get, url, {}, std::nullopt);
-}
-
-awaitable<http_response> http_client::post(boost::urls::url const &url) {
-    return send(http::verb::post, url, {}, std::nullopt);
+awaitable<http_response> http_client::get(boost::urls::url const &url,
+                                          http_headers const &headers) {
+    return send(http::verb::get, url, headers, std::nullopt);
 }
 
 awaitable<http_response> http_client::post(boost::urls::url const &url,
-                                           std::string const &body) {
-    return send(http::verb::post, url,
-                {{to_string(http::field::content_type), "application/json"}},
-                body);
+                                           http_headers const &headers) {
+    return send(http::verb::post, url, headers, std::nullopt);
+}
+
+awaitable<http_response> http_client::post(boost::urls::url const &url,
+                                           std::string const &body,
+                                           http_headers const &headers) {
+    return send(http::verb::post, url, headers, body);
 }
 
 } // namespace td365

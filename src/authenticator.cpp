@@ -77,7 +77,7 @@ struct auth_token {
 boost::asio::awaitable<auth_token> login(const std::string &username,
                                          const std::string &password) {
     http_client cli(co_await boost::asio::this_coro::executor,
-                    url{OAuthTokenHost});
+                    std::string{OAuthTokenHost});
     json body = {
         {"realm", "Username-Password-Authentication"},
         {"client_id", "eeXrVwSMXPZ4pJpwStuNyiUa7XxGZRX9"},
@@ -86,7 +86,8 @@ boost::asio::awaitable<auth_token> login(const std::string &username,
         {"username", username},
         {"password", password},
     };
-    const auto response = co_await cli.post(url{"/oauth/token"}, body.dump());
+    const auto response = co_await cli.post(url{"/oauth/token"}, body.dump(),
+                                            application_json_headers);
     verify(response.result() == boost::beast::http::status::ok,
            "login failed with result {}", static_cast<int>(response.result()));
 
@@ -150,7 +151,7 @@ boost::asio::awaitable<web_detail> authenticate(std::string username,
     }
 
     http_client client(co_await boost::asio::this_coro::executor,
-                       url{PortalSiteHost});
+                       std::string{PortalSiteHost});
 
     client.default_headers().emplace(
         "Authorization", std::format("Bearer {}", token.access_token));

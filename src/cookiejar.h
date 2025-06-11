@@ -8,6 +8,7 @@
 #pragma once
 
 #include "http.h"
+
 #include <boost/url.hpp>
 #include <chrono>
 #include <string>
@@ -15,26 +16,26 @@
 
 namespace td365 {
 class cookiejar {
-public:
-  explicit cookiejar(const boost::urls::url &);
+  public:
+    explicit cookiejar(std::string file_name);
 
-  void save() const;
+    void save() const;
 
-  void update(const http_response &res);
+    void update(const http_response &res);
 
-  void apply(http_request &req);
+    void apply(http_request &req);
 
-  struct cookie {
-    std::string name;
-    std::string value;
-    // A default-constructed expiry_time indicates a session cookie.
-    std::chrono::system_clock::time_point expiry_time;
-  };
+    struct cookie {
+        std::string name;
+        std::string value;
+        // A default-constructed expiry_time indicates a session cookie.
+        std::chrono::system_clock::time_point expiry_time;
+    };
 
-  cookie get(const std::string &name) const;
+    cookie get(const std::string &name) const;
 
-private:
-  std::string path_;
-  std::unordered_map<std::string, cookie> cookies_;
+  private:
+    const std::string path_;
+    std::unordered_map<std::string, cookie> cookies_;
 };
 } // namespace td365

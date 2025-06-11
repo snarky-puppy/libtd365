@@ -23,20 +23,26 @@
 
 namespace td365 {
 
+extern http_headers const no_headers;
+extern http_headers const application_json_headers;
+
 struct http_client {
 
-    http_client(boost::asio::any_io_executor, const boost::urls::url &);
+    http_client(boost::asio::any_io_executor, std::string host);
     virtual ~http_client() = default;
     http_client(const http_client &) = delete;
     http_client(http_client &&) = delete;
     http_client &operator=(const http_client &) = delete;
     http_client &operator=(http_client &&) = delete;
 
-    boost::asio::awaitable<http_response> get(boost::urls::url const &url);
+    boost::asio::awaitable<http_response>
+    get(boost::urls::url const &url, http_headers const &headers = no_headers);
 
-    boost::asio::awaitable<http_response> post(boost::urls::url const &url);
-    boost::asio::awaitable<http_response> post(boost::urls::url const &url,
-                                               std::string const &body);
+    boost::asio::awaitable<http_response>
+    post(boost::urls::url const &url, http_headers const &headers = no_headers);
+    boost::asio::awaitable<http_response>
+    post(boost::urls::url const &url, std::string const &body,
+         http_headers const &header = no_headers);
 
     http_headers &default_headers() { return default_headers_; };
 
@@ -54,8 +60,8 @@ struct http_client {
 
     using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
     stream_t stream_;
-    const boost::urls::url url_;
 
+    const std::string host_;
     cookiejar jar_;
     http_headers default_headers_;
 };

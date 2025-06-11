@@ -102,12 +102,11 @@ void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
                 spdlog::info("message loop exiting");
             } catch (...) {
                 std::println(std::cerr, "ws_client: unknown exception");
+                p.set_exception(std::current_exception());
+                co_return;
             }
 
-            // rest_client_.start_session_loop();
-
             p.set_value();
-            p.set_exception(std::current_exception());
 
             co_return;
         },
