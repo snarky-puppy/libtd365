@@ -10,7 +10,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
-#include <boost/url/url_view.hpp>
+#include <boost/url/url.hpp>
 #include <string>
 #include <string_view>
 
@@ -22,7 +22,7 @@ class ws {
   public:
     explicit ws();
 
-    boost::asio::awaitable<void> connect(boost::urls::url_view);
+    boost::asio::awaitable<void> connect(boost::urls::url);
 
     boost::asio::awaitable<void> close();
 

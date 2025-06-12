@@ -38,9 +38,14 @@ bool is_debug_enabled() {
 
 ws::ws() {}
 
-boost::asio::awaitable<void> ws::connect(boost::urls::url_view u) {
+boost::asio::awaitable<void> ws::connect(boost::urls::url url) {
     auto executor = co_await net::this_coro::executor;
     auto resolver = boost::asio::ip::tcp::resolver{executor};
+
+    auto u = url;
+    if (auto *env = std::getenv("PROXY")) {
+        u = boost::urls::url{env};
+    }
 
     ws_ = std::make_unique<websocket_type>(executor, ssl_ctx());
 
