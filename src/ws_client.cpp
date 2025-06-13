@@ -63,13 +63,12 @@ bool is_error_continuable(const boost::system::error_code &ec) {
     return false;
 }
 
-ws_client::ws_client(const user_callbacks &callbacks) : callbacks_(callbacks) {}
+ws_client::ws_client(const user_callbacks &callbacks)
+    : callbacks_(callbacks), auth_f_(auth_p_.get_future()) {}
 
 ws_client::~ws_client() {}
 
 boost::asio::awaitable<void> ws_client::connect(boost::urls::url_view u) {
-    auth_p_ = std::promise<void>();
-    auth_f_ = auth_p_.get_future();
     ws_ = std::make_unique<ws>();
     return ws_->connect(u);
 }
@@ -219,7 +218,7 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
 
 void ws_client::process_subscribe_response(const nlohmann::json &msg) {
     auto d = msg["d"];
-    assert(d["HasError"].get<bool>() == false);
+    verify(d["HasError"].get<bool>() == false, "HasError is true");
     auto prices = d["Current"].get<std::vector<std::string>>();
     auto g = string_to_price_type(d["PriceGrouping"].get<std::string>());
     for (const auto &p : prices) {

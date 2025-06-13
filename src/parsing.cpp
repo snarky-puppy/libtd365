@@ -71,8 +71,7 @@ tick parse_tick(const std::string &price_string, grouping price_type) {
 
     // Ensure we have enough fields
     if (fields.size() < 13) {
-        std::cerr << "Invalid price data format: " << price_string << std::endl;
-        assert(false);
+        throw fail("Invalid price data format: {}", price_string);
     }
 
     // Parse direction

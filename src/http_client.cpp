@@ -82,7 +82,7 @@ awaitable<void> http_client::ensure_connected() {
 boost::asio::awaitable<http_response>
 http_client::send(boost::beast::http::verb verb, std::string_view target,
                   http_headers const &headers,
-                  std::optional<std::string> const &body) {
+                  std::optional<std::string> body) {
     co_await ensure_connected();
     auto ex = co_await boost::asio::this_coro::executor;
 
@@ -103,9 +103,11 @@ http_client::send(boost::beast::http::verb verb, std::string_view target,
 
     jar_.apply(req);
 
-    if (body) {
+    if (body.has_value()) {
         req.body() = *body;
         req.prepare_payload();
+    } else if (verb == http::verb::post) {
+        req.set(http::field::content_length, "0");
     }
 
     try {
@@ -141,18 +143,13 @@ http_client::send(boost::beast::http::verb verb, std::string_view target,
 
 awaitable<http_response> http_client::get(std::string_view target,
                                           http_headers const &headers) {
-    return send(http::verb::get, target, headers, std::nullopt);
+    co_return co_await send(http::verb::get, target, headers, std::nullopt);
 }
 
 awaitable<http_response> http_client::post(std::string_view target,
+                                           std::optional<std::string> body,
                                            http_headers const &headers) {
-    return send(http::verb::post, target, headers, std::nullopt);
-}
-
-awaitable<http_response> http_client::post(std::string_view target,
-                                           std::string const &body,
-                                           http_headers const &headers) {
-    return send(http::verb::post, target, headers, body);
+    co_return co_await send(http::verb::post, target, headers, std::move(body));
 }
 
 } // namespace td365

@@ -56,8 +56,8 @@ template <typename T> T extract_d(const json &j) {
 
 template <typename T>
 auto make_post(http_client *client, std::string_view target,
-               nlohmann::json &&body) -> net::awaitable<T> {
-    auto resp = co_await client->post(target, body.dump());
+               std::optional<std::string> body) -> net::awaitable<T> {
+    auto resp = co_await client->post(target, std::move(body));
     verify(resp.result() == boost::beast::http::status::ok,
            "unexpected response: from {}: {}", target,
            static_cast<unsigned>(resp.result()));
@@ -109,8 +109,9 @@ auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
     auto [ots, login_id] = co_await open_client(url.encoded_target());
     auto token = client_->jar().get(ots);
 
-    const auto referer = std::format("{}://{}/Advanced.aspx?ots={}",
-                                     url.scheme(), url.host(), ots);
+    const auto referer =
+        std::format("{}://{}/Advanced.aspx?ots={}", std::string{url.scheme()},
+                    url.host(), ots);
 
     client_->default_headers().emplace("Origin", url.buffer());
     client_->default_headers().emplace("Referer", referer);
@@ -119,16 +120,15 @@ auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
 
 auto rest_api::get_market_super_group()
     -> awaitable<std::vector<market_group>> {
-    json body = {};
-    return make_post<std::vector<market_group>>(
-        client_.get(), "/UTSAPI.asmx/GetMarketSuperGroup", std::move(body));
+    co_return co_await make_post<std::vector<market_group>>(
+        client_.get(), "/UTSAPI.asmx/GetMarketSuperGroup", std::nullopt);
 }
 
 auto rest_api::get_market_group(int id)
     -> awaitable<std::vector<market_group>> {
     json body = {{"superGroupId", id}};
-    return make_post<std::vector<market_group>>(
-        client_.get(), "/UTSAPI.asmx/GetMarketGroup", std::move(body));
+    co_return co_await make_post<std::vector<market_group>>(
+        client_.get(), "/UTSAPI.asmx/GetMarketGroup", body.dump());
 }
 
 auto rest_api::get_market_quote(int id) -> awaitable<std::vector<market>> {
@@ -136,7 +136,7 @@ auto rest_api::get_market_quote(int id) -> awaitable<std::vector<market>> {
         {"groupID", id},      {"keyword", ""},   {"popular", false},
         {"portfolio", false}, {"search", false},
     };
-    return make_post<std::vector<market>>(
-        client_.get(), "/UTSAPI.asmx/GetMarketQuote", std::move(body));
+    co_return co_await make_post<std::vector<market>>(
+        client_.get(), "/UTSAPI.asmx/GetMarketQuote", body.dump());
 }
 } // namespace td365

@@ -71,7 +71,8 @@ json extract_jwt_payload(const json &jwt) {
     auto jwts = to_string(jwt);
     const static std::regex re(R"(^[^\.]+\.([^\.]+).*$)");
     std::smatch m;
-    assert(std::regex_match(jwts, m, re));
+    auto matched = std::regex_match(jwts, m, re);
+    verify(matched, "jwt payload did not match: {}", jwts);
     auto payload = m[1].str();
 
     while ((payload.size() & 3) != 0) {

@@ -121,7 +121,9 @@ boost::asio::awaitable<json> select_account(http_client &client,
 boost::asio::awaitable<url> fetch_platform_url(http_client &client,
                                                std::string_view target) {
     auto response = co_await client.get(target);
-    assert(response.result() == boost::beast::http::status::ok);
+    verify(response.result() == boost::beast::http::status::ok,
+           "GET {} - bad status: {}", target,
+           static_cast<int>(response.result()));
 
     auto j = json::parse(get_http_body(response));
     auto loginagent_url = j["url"].get<std::string>();
