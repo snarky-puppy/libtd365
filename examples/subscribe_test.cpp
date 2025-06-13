@@ -13,45 +13,43 @@
 #include "td365.h"
 
 #include <algorithm>
+#include <boost/core/verbose_terminate_handler.hpp>
+#include <boost/exception/diagnostic_information.hpp>
 #include <cassert>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <vector>
 
 int main(int, char **) {
-    try {
-        boost::asio::io_context ioc;
-        spdlog::set_level(spdlog::level::debug);
+    std::set_terminate(boost::core::verbose_terminate_handler);
 
-        auto ctx = td365::user_callbacks{
-            .tick_cb = [&](td365::tick &&t) { std::cout << t << std::endl; },
-        };
+    boost::asio::io_context ioc;
+    spdlog::set_level(spdlog::level::debug);
 
-        td365::td365 client(ctx);
+    auto ctx = td365::user_callbacks{
+        .tick_cb = [&](td365::tick &&t) { std::cout << t << std::endl; },
+    };
 
-        client.connect();
+    td365::td365 client(ctx);
 
-        auto super_groups = client.get_market_super_group();
-        auto crypto = std::ranges::find_if(super_groups, [](const auto &x) {
-            return x.name.compare("Cryptocurrency") == 0;
-        });
-        assert(crypto != super_groups.end());
+    client.connect();
 
-        auto group = client.get_market_group(crypto->id);
-        assert(group.size() == 1);
+    auto super_groups = client.get_market_super_group();
+    auto crypto = std::ranges::find_if(super_groups, [](const auto &x) {
+        return x.name.compare("Cryptocurrency") == 0;
+    });
+    assert(crypto != super_groups.end());
 
-        auto markets = client.get_market_quote(group[0].id);
-        std::ranges::for_each(markets, [&client](const auto &x) {
-            client.subscribe(x.quote_id);
-        });
+    auto group = client.get_market_group(crypto->id);
+    assert(group.size() == 1);
 
-        boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
-            work_guard(ioc.get_executor());
-        ioc.run();
-    } catch (const std::exception &e) {
-        std::cerr << "terminating: " << e.what() << std::endl;
-    } catch (...) {
-        std::cerr << "unknown exception" << std::endl;
-    }
+    auto markets = client.get_market_quote(group[0].id);
+    std::ranges::for_each(
+        markets, [&client](const auto &x) { client.subscribe(x.quote_id); });
+
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
+        work_guard(ioc.get_executor());
+    ioc.run();
+
     return 0;
 }

@@ -9,6 +9,7 @@
 
 #include "http_client.h"
 #include "nlohmann/json_fwd.hpp"
+#include "verify.h"
 
 #include <boost/asio/ssl/context.hpp>
 #include <boost/url/url.hpp>
@@ -23,5 +24,8 @@ std::string now_utc();
 boost::urls::url check_proxy_url();
 
 std::string get_http_body(http_response const &res);
+
+boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
+td_resolve(boost::urls::url_view url);
 
 } // namespace td365

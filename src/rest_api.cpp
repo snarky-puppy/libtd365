@@ -30,11 +30,12 @@ static constexpr auto MAX_DEPTH = 4;
 namespace td365 {
 
 namespace {
-std::string extract_ots(const boost::urls::url &u) {
-    constexpr std::string_view key = "ots";
-    auto iter = u.encoded_params().find(key);
+std::string extract_ots(std::string_view s) {
+    auto r = boost::urls::parse_origin_form(s);
+    auto u = r.value();
+    auto iter = u.encoded_params().find("ots");
     verify(iter != u.encoded_params().end(),
-           "extract_ots: missing parameter in '{}'", u.buffer());
+           "extract_ots: missing parameter in '{}'", s);
     return std::string(iter->value);
 }
 
@@ -54,11 +55,11 @@ template <typename T> T extract_d(const json &j) {
 }
 
 template <typename T>
-auto make_post(http_client *client, const boost::urls::url &url,
+auto make_post(http_client *client, std::string_view target,
                nlohmann::json &&body) -> net::awaitable<T> {
-    auto resp = co_await client->post(url, body.dump());
+    auto resp = co_await client->post(target, body.dump());
     verify(resp.result() == boost::beast::http::status::ok,
-           "unexpected response: from {}: {}", url.buffer(),
+           "unexpected response: from {}: {}", target,
            static_cast<unsigned>(resp.result()));
     auto j = json::parse(get_http_body(resp));
     co_return extract_d<T>(j);
@@ -78,34 +79,34 @@ rest_api::rest_api() = default;
 
 rest_api::~rest_api() = default;
 
-auto rest_api::open_client(boost::urls::url u, int depth)
+auto rest_api::open_client(std::string_view target, int depth)
     -> net::awaitable<std::pair<std::string, std::string>> {
-    if (depth > MAX_DEPTH) {
-        spdlog::error("max depth reached: {}", depth);
-        throw_api_error(api_error::max_depth, "path={} depth={}", u.buffer(),
-                        depth);
-    }
-    auto response = co_await client_->get(u);
-    if (response.result() == http::status::ok) {
-        // extract the ots value here while we have the path
-        // GET /Advanced.aspx?ots=WJFUMNFE
-        // ots is the name of the cookie with the session token
-        auto ots = extract_ots(u);
-        auto login_id = extract_login_id(get_http_body(response));
-        co_return std::make_pair(ots, login_id);
-    }
-    verify(response.result() == http::status::found,
-           "unexpected response from {}: result={}", u.buffer(),
-           static_cast<unsigned>(response.result()));
+    std::string t(target);
 
-    const auto location = boost::urls::url{response.at(http::field::location)};
-    co_return co_await open_client(location, depth + 1);
+    while (depth <= MAX_DEPTH) {
+        auto response = co_await client_->get(t);
+        if (response.result() == http::status::ok) {
+            // extract the ots value here while we have the path
+            // GET /Advanced.aspx?ots=WJFUMNFE
+            // ots is the name of the cookie with the session token
+            auto ots = extract_ots(t);
+            auto login_id = extract_login_id(get_http_body(response));
+            co_return std::make_pair(ots, login_id);
+        }
+        verify(response.result() == http::status::found,
+               "unexpected response from {}: result={}", t,
+               static_cast<unsigned>(response.result()));
+
+        t = response.at(http::field::location);
+        depth++;
+    }
+    throw fail("max depth reached: {}", target);
 }
 
 auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
     auto ex = co_await net::this_coro::executor;
     client_ = std::make_unique<http_client>(ex, url.host());
-    auto [ots, login_id] = co_await open_client(url);
+    auto [ots, login_id] = co_await open_client(url.encoded_target());
     auto token = client_->jar().get(ots);
 
     const auto referer = std::format("{}://{}/Advanced.aspx?ots={}",
@@ -120,16 +121,14 @@ auto rest_api::get_market_super_group()
     -> awaitable<std::vector<market_group>> {
     json body = {};
     return make_post<std::vector<market_group>>(
-        client_.get(), boost::urls::url{"/UTSAPI.asmx/GetMarketSuperGroup"},
-        std::move(body));
+        client_.get(), "/UTSAPI.asmx/GetMarketSuperGroup", std::move(body));
 }
 
 auto rest_api::get_market_group(int id)
     -> awaitable<std::vector<market_group>> {
     json body = {{"superGroupId", id}};
     return make_post<std::vector<market_group>>(
-        client_.get(), boost::urls::url{"/UTSAPI.asmx/GetMarketGroup"},
-        std::move(body));
+        client_.get(), "/UTSAPI.asmx/GetMarketGroup", std::move(body));
 }
 
 auto rest_api::get_market_quote(int id) -> awaitable<std::vector<market>> {
@@ -138,7 +137,6 @@ auto rest_api::get_market_quote(int id) -> awaitable<std::vector<market>> {
         {"portfolio", false}, {"search", false},
     };
     return make_post<std::vector<market>>(
-        client_.get(), boost::urls::url{"/UTSAPI.asmx/GetMarketQuote"},
-        std::move(body));
+        client_.get(), "/UTSAPI.asmx/GetMarketQuote", std::move(body));
 }
 } // namespace td365

@@ -59,7 +59,8 @@
 namespace td365 {
 namespace net = boost::asio; // from <boost/asio.hpp>
 
-td365::td365(const user_callbacks &callbacks) : ws_client_(callbacks) {}
+td365::td365(const user_callbacks &callbacks)
+    : ws_client_(callbacks), connect_f_(connect_p_.get_future()) {}
 
 td365::~td365() {
     if (io_thread_.joinable()) {
@@ -81,11 +82,6 @@ void td365::connect(const std::string &username, const std::string &password,
 }
 
 void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
-    // Reset the promise/future for a new connection attempt
-    connected_ = false;
-    std::promise<void> p;
-    auto fut = p.get_future();
-
     net::co_spawn(
         io_context_,
         [&]() -> net::awaitable<void> {
@@ -94,6 +90,7 @@ void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
                 auto [token, login_id] =
                     co_await rest_client_.connect(auth_detail.platform_url);
 
+                connect_p_.set_value();
                 while (!shutdown_) {
                     co_await ws_client_.connect(auth_detail.sock_host);
                     co_await ws_client_.message_loop(login_id, token,
@@ -102,19 +99,17 @@ void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
                 spdlog::info("message loop exiting");
             } catch (...) {
                 std::println(std::cerr, "ws_client: unknown exception");
-                p.set_exception(std::current_exception());
+                connect_p_.set_exception(std::current_exception());
                 co_return;
             }
-
-            p.set_value();
 
             co_return;
         },
         net::detached);
 
     start_io_thread();
-    fut.get();                  // wait for connect() to finish
-    ws_client_.wait_for_auth(); // wait for websocket to finish authenticating
+    connect_f_.get();
+    ws_client_.wait_for_auth();
 }
 
 void td365::start_io_thread() {

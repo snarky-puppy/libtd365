@@ -86,7 +86,7 @@ boost::asio::awaitable<auth_token> login(const std::string &username,
         {"username", username},
         {"password", password},
     };
-    const auto response = co_await cli.post(url{"/oauth/token"}, body.dump(),
+    const auto response = co_await cli.post("/oauth/token", body.dump(),
                                             application_json_headers);
     verify(response.result() == boost::beast::http::status::ok,
            "login failed with result {}", static_cast<int>(response.result()));
@@ -105,7 +105,7 @@ boost::asio::awaitable<auth_token> login(const std::string &username,
 
 boost::asio::awaitable<json> select_account(http_client &client,
                                             const std::string &account_id) {
-    auto response = co_await client.get(url{"/TD365/user/accounts/"});
+    auto response = co_await client.get("/TD365/user/accounts/");
     verify(response.result() == boost::beast::http::status::ok,
            "select_account failed with result {}",
            static_cast<int>(response.result()));
@@ -119,8 +119,8 @@ boost::asio::awaitable<json> select_account(http_client &client,
 }
 
 boost::asio::awaitable<url> fetch_platform_url(http_client &client,
-                                               const url &launch_url) {
-    auto response = co_await client.get(launch_url);
+                                               std::string_view target) {
+    auto response = co_await client.get(target);
     assert(response.result() == boost::beast::http::status::ok);
 
     auto j = json::parse(get_http_body(response));
@@ -161,11 +161,11 @@ boost::asio::awaitable<web_detail> authenticate(std::string username,
     web_detail details;
     details.account_type = account["accountType"] == "DEMO" ? demo : prod;
 
-    auto launch_url = boost::urls::parse_uri(
-        account["button"]["linkTo"].get<std::string_view>());
+    std::string_view utmp = account["button"]["linkTo"].get<std::string_view>();
+    auto launch_url = boost::urls::parse_uri(utmp);
+    std::string_view target = launch_url.value().encoded_target();
 
-    details.platform_url =
-        co_await fetch_platform_url(client, launch_url.value());
+    details.platform_url = co_await fetch_platform_url(client, target);
 
     details.site_host =
         url{details.account_type == demo ? DemoSiteHost : ProdSiteHost};

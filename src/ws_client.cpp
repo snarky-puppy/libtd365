@@ -68,6 +68,8 @@ ws_client::ws_client(const user_callbacks &callbacks) : callbacks_(callbacks) {}
 ws_client::~ws_client() {}
 
 boost::asio::awaitable<void> ws_client::connect(boost::urls::url_view u) {
+    auth_p_ = std::promise<void>();
+    auth_f_ = auth_p_.get_future();
     ws_ = std::make_unique<ws>();
     return ws_->connect(u);
 }
@@ -197,7 +199,7 @@ ws_client::process_authentication_response(const nlohmann::json &msg) {
                        {"priceGrouping", "Sampled"},
                        {"action", "subscribe"}});
     }
-    auth_promise_.set_value();
+    auth_p_.set_value();
     co_return;
 }
 
@@ -215,8 +217,6 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
     }
 }
 
-void ws_client::wait_for_auth() { auth_future_.get(); }
-
 void ws_client::process_subscribe_response(const nlohmann::json &msg) {
     auto d = msg["d"];
     assert(d["HasError"].get<bool>() == false);
@@ -226,4 +226,7 @@ void ws_client::process_subscribe_response(const nlohmann::json &msg) {
         callbacks_.on_tick(parse_tick(p, g));
     }
 }
+
+void ws_client::wait_for_auth() { auth_f_.get(); }
+
 } // namespace td365

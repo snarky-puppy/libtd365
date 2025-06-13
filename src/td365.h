@@ -19,7 +19,7 @@
 
 namespace td365 {
 
-class td365 : public std::enable_shared_from_this<td365> {
+class td365 {
   public:
     explicit td365(const user_callbacks &);
 
@@ -55,9 +55,10 @@ class td365 : public std::enable_shared_from_this<td365> {
     rest_api rest_client_;
     ws_client ws_client_;
 
-    std::atomic<bool> connected_{false};
-
     std::atomic<bool> shutdown_{false};
+
+    std::promise<void> connect_p_;
+    std::future<void> connect_f_;
 
     void connect(std::function<boost::asio::awaitable<web_detail>()> f);
 

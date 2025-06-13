@@ -61,8 +61,6 @@ http_client::http_client(boost::asio::any_io_executor ex, std::string host)
 
 awaitable<void> http_client::ensure_connected() {
     if (!stream_.lowest_layer().is_open()) {
-        auto executor = co_await boost::asio::this_coro::executor;
-        auto resolver = boost::asio::ip::tcp::resolver{executor};
 
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         if (!SSL_set_tlsext_host_name(stream_.native_handle(),
@@ -72,16 +70,9 @@ awaitable<void> http_client::ensure_connected() {
                  boost::asio::error::get_ssl_category()}};
         }
 
-        auto url = boost::urls::url{std::string{"https://"} + host_};
-        if (auto *env = std::getenv("PROXY")) {
-            url = boost::urls::url{env};
-        }
+        auto const ep = co_await td_resolve(boost::urls::url{host_});
+        co_await beast::get_lowest_layer(stream_).async_connect(*ep.begin());
 
-        auto result = co_await resolver.async_resolve(
-            url.host(), url.has_port() ? url.port() : "443",
-            boost::asio::use_awaitable);
-        co_await beast::get_lowest_layer(stream_).async_connect(
-            *result.begin(), boost::asio::use_awaitable);
         co_await stream_.async_handshake(ssl::stream_base::client);
     }
 
@@ -89,13 +80,13 @@ awaitable<void> http_client::ensure_connected() {
 }
 
 boost::asio::awaitable<http_response>
-http_client::send(boost::beast::http::verb verb, boost::urls::url const &url,
+http_client::send(boost::beast::http::verb verb, std::string_view target,
                   http_headers const &headers,
                   std::optional<std::string> const &body) {
     co_await ensure_connected();
     auto ex = co_await boost::asio::this_coro::executor;
 
-    auto req = http::request<http::string_body>{verb, url.encoded_target(), 11};
+    auto req = http::request<http::string_body>{verb, target, 11};
     req.set(http::field::accept_encoding, "gzip"); // ensure this is set
 
     if (!default_headers_.empty()) {
@@ -148,20 +139,20 @@ http_client::send(boost::beast::http::verb verb, boost::urls::url const &url,
     co_return resp;
 }
 
-awaitable<http_response> http_client::get(boost::urls::url const &url,
+awaitable<http_response> http_client::get(std::string_view target,
                                           http_headers const &headers) {
-    return send(http::verb::get, url, headers, std::nullopt);
+    return send(http::verb::get, target, headers, std::nullopt);
 }
 
-awaitable<http_response> http_client::post(boost::urls::url const &url,
+awaitable<http_response> http_client::post(std::string_view target,
                                            http_headers const &headers) {
-    return send(http::verb::post, url, headers, std::nullopt);
+    return send(http::verb::post, target, headers, std::nullopt);
 }
 
-awaitable<http_response> http_client::post(boost::urls::url const &url,
+awaitable<http_response> http_client::post(std::string_view target,
                                            std::string const &body,
                                            http_headers const &headers) {
-    return send(http::verb::post, url, headers, body);
+    return send(http::verb::post, target, headers, body);
 }
 
 } // namespace td365

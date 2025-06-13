@@ -4,9 +4,10 @@
 #include <spdlog/spdlog.h>
 
 int main() {
-    auto s = std::string{"http://localhost:8080"};
+    auto s = std::string{"localhost:8080"};
     auto u = boost::urls::url_view(s);
     spdlog::info("{:p}", s.data());
-    spdlog::info("{:p}", u.data());
-    spdlog::info("{:p}", u.scheme().data());
+    spdlog::info("{}", u.data());
+    spdlog::info("{}", u.scheme());
+    spdlog::info("{}", u.host());
 }

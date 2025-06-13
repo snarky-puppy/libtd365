@@ -45,7 +45,7 @@ class rest_api : public std::enable_shared_from_this<rest_api> {
   private:
     std::unique_ptr<http_client> client_;
 
-    auto open_client(boost::urls::url, int depth = 0)
+    auto open_client(std::string_view target, int depth = 0)
         -> awaitable<std::pair<std::string, std::string>>;
 };
 } // namespace td365

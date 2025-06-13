@@ -36,12 +36,12 @@ struct http_client {
     http_client &operator=(http_client &&) = delete;
 
     boost::asio::awaitable<http_response>
-    get(boost::urls::url const &url, http_headers const &headers = no_headers);
+    get(std::string_view target, http_headers const &headers = no_headers);
 
     boost::asio::awaitable<http_response>
-    post(boost::urls::url const &url, http_headers const &headers = no_headers);
+    post(std::string_view target, http_headers const &headers = no_headers);
     boost::asio::awaitable<http_response>
-    post(boost::urls::url const &url, std::string const &body,
+    post(std::string_view target, std::string const &body,
          http_headers const &header = no_headers);
 
     http_headers &default_headers() { return default_headers_; };
@@ -55,7 +55,7 @@ struct http_client {
         boost::beast::http::request<boost::beast::http::string_body> &req);
 
     boost::asio::awaitable<http_response>
-    send(boost::beast::http::verb verb, boost::urls::url const &url,
+    send(boost::beast::http::verb verb, std::string_view target,
          http_headers const &headers, std::optional<std::string> const &body);
 
     using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;

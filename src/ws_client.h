@@ -42,8 +42,6 @@ class ws_client {
 
     std::vector<tick> get_price_data(bool blocking);
 
-    bool connected() { return connected_; }
-
     void wait_for_auth();
 
   private:
@@ -67,15 +65,12 @@ class ws_client {
     user_callbacks callbacks_;
     std::unique_ptr<ws> ws_;
     std::string supported_version_ = "1.0.0.6";
-    std::promise<void> auth_promise_;
-    std::future<void> auth_future_;
-    user_callbacks usr_ctx_;
 
     // Connection state tracking
-    std::atomic<bool> connected_{false};
-    std::promise<void> disconnect_promise_;
-    std::future<void> disconnect_future_;
     std::string connection_id_;
     std::vector<int> subscribed_;
+
+    std::promise<void> auth_p_;
+    std::future<void> auth_f_;
 };
 } // namespace td365

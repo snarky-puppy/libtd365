@@ -40,27 +40,18 @@ ws::ws() {}
 
 boost::asio::awaitable<void> ws::connect(boost::urls::url url) {
     auto executor = co_await net::this_coro::executor;
-    auto resolver = boost::asio::ip::tcp::resolver{executor};
-
-    auto u = url;
-    if (auto *env = std::getenv("PROXY")) {
-        u = boost::urls::url{env};
-    }
 
     ws_ = std::make_unique<websocket_type>(executor, ssl_ctx());
-
-    auto const ep = co_await resolver.async_resolve(
-        u.host(), u.has_port() ? u.port() : "443");
 
     // Set a timeout on the operation
     beast::get_lowest_layer(*ws_).expires_after(std::chrono::seconds(30));
 
-    // Make the connection on the IP address we get from a lookup
+    auto const ep = co_await td_resolve(url);
     co_await beast::get_lowest_layer(*ws_).async_connect(ep);
 
     // Set SNI Hostname (many hosts need this to handshake successfully)
     if (!SSL_set_tlsext_host_name(ws_->next_layer().native_handle(),
-                                  u.host().c_str())) {
+                                  url.host().c_str())) {
         throw beast::system_error(static_cast<int>(::ERR_get_error()),
                                   net::error::get_ssl_category());
     }
@@ -86,7 +77,7 @@ boost::asio::awaitable<void> ws::connect(boost::urls::url url) {
         websocket::stream_base::timeout::suggested(beast::role_type::client));
 
     // Perform the websocket handshake
-    co_await ws_->async_handshake(u.host(), "/", use_awaitable);
+    co_await ws_->async_handshake(url.host(), "/", use_awaitable);
 
     co_return;
 }
