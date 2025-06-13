@@ -210,7 +210,7 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
             it != data.end() && it->is_array() && !it->empty()) {
             auto prices = it->get<std::vector<std::string>>();
             for (const auto &price : prices) {
-                callbacks_.on_tick(parse_tick(price, key.second));
+                callbacks_.on_tick(parse_tick2(price, key.second));
             }
         }
     }

@@ -24,7 +24,7 @@ set(Boost_USE_STATIC_LIBS ON) # only find static libs
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF) # do not look for boost libraries linked against static C++ std lib
 
-find_package(Boost REQUIRED COMPONENTS system thread url iostreams)
+find_package(Boost REQUIRED COMPONENTS system thread url iostreams charconv)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -56,9 +56,8 @@ enable_testing()
 # requires Catch2 to be installed via vcpkg: vcpkg install catch2
 find_package(Catch2 CONFIG REQUIRED)
 
-# assume your test lives at tests/test_cancelable.cpp
 add_executable(td365_tests
-        tests/test_cancelable.cpp
+        tests/test_parsing.cpp
 )
 
 target_link_libraries(td365_tests PRIVATE

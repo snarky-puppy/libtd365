@@ -9,12 +9,12 @@
 
 #include "types.h"
 
-#include <cassert>
+#include <boost/charconv.hpp>
 #include <iomanip>
 #include <iostream>
+#include <ranges>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace td365 {
@@ -124,5 +124,87 @@ tick parse_tick(const std::string &price_string, grouping price_type) {
                 .latency = latency_value};
 
     return result;
+}
+
+tick parse_tick2(std::string_view price_string, grouping price_type) {
+    constexpr size_t EXPECTED_FIELDS = 13;
+    std::array<std::string_view, EXPECTED_FIELDS> fields;
+    size_t idx = 0;
+
+    // split on ',' into subranges
+    for (auto sub : price_string | std::views::split(',') |
+                        std::views::transform([](auto rng) {
+                            auto first = rng.begin();
+                            auto len =
+                                std::ranges::size(rng); // unsigned size_t
+                            return std::string_view(&*first, len);
+                        })) {
+        if (idx < EXPECTED_FIELDS) {
+            fields[idx++] = sub;
+        } else {
+            break;
+        }
+    }
+    verify(idx == EXPECTED_FIELDS, "Invalid price data format: {}",
+           price_string);
+
+    // helpers to parse integral/double
+    auto parse_int = [&](std::string_view sv) {
+        int value{};
+        auto [ptr, ec] = boost::charconv::from_chars(
+            sv.data(), sv.data() + sv.size(), value);
+        verify(ec == std::errc(), "bad int: {}", sv);
+        return value;
+    };
+    auto parse_double = [&](std::string_view sv) {
+        double value{};
+        auto [ptr, ec] = boost::charconv::from_chars(
+            sv.data(), sv.data() + sv.size(), value);
+        verify(ec == std::errc(), "bad double: {}", sv);
+        return value;
+    };
+
+    // parse direction
+    char d0 = fields[4].empty() ? '?' : fields[4][0];
+    direction dir_value = (d0 == 'u'   ? direction::up
+                           : d0 == 'd' ? direction::down
+                                       : direction::unchanged);
+
+    // timestamp conversion
+    constexpr int64_t WINDOWS_TICKS_TO_UNIX_EPOCH = 621355968000000000LL;
+    constexpr int64_t TICKS_PER_NANOSECOND = 100; // 100 ns
+
+    int64_t windows_ticks{};
+    {
+        auto [ptr, ec] = boost::charconv::from_chars(
+            fields[11].data(), fields[11].data() + fields[11].size(),
+            windows_ticks);
+        if (ec != std::errc())
+            throw fail("Bad ticks: ", std::string(fields[11]));
+    }
+    int64_t unix_ns =
+        (windows_ticks - WINDOWS_TICKS_TO_UNIX_EPOCH) * TICKS_PER_NANOSECOND;
+    auto timestamp_value = std::chrono::time_point<std::chrono::system_clock,
+                                                   std::chrono::nanoseconds>{
+        std::chrono::nanoseconds{unix_ns}};
+    auto latency_value = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now() - timestamp_value);
+
+    // build and return
+    return tick{.quote_id = parse_int(fields[0]),
+                .bid = parse_double(fields[1]),
+                .ask = parse_double(fields[2]),
+                .daily_change = parse_double(fields[3]),
+                .dir = dir_value,
+                .tradable = (fields[5] == "1"),
+                .high = parse_double(fields[6]),
+                .low = parse_double(fields[7]),
+                .hash = std::string(fields[8]), // needs owning string
+                .call_only = (fields[9] == "1"),
+                .mid_price = parse_double(fields[10]),
+                .timestamp = timestamp_value,
+                .field13 = parse_int(fields[12]),
+                .group = price_type,
+                .latency = latency_value};
 }
 } // namespace td365
