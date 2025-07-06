@@ -9,6 +9,7 @@
 
 #include "error.h"
 #include "http_client.h"
+#include "parsing.h"
 #include "types.h"
 #include "utils.h"
 #include "verify.h"
@@ -50,14 +51,28 @@ std::string extract_login_id(std::string_view body) {
     return std::string{body.substr(pos, end - pos)};
 }
 
+std::string extract_account_id(std::string_view body) {
+    constexpr std::string_view key = R"(id="hfAccountID" value=")";
+    auto pos = body.find(key);
+    verify(pos != std::string_view::npos,
+           "could not find hfAccountID in document");
+    pos += key.size();
+    auto end = body.find('"', pos);
+    verify(end != std::string_view::npos, "hfAccountID element badly formed");
+    return std::string{body.substr(pos, end - pos)};
+}
+
 template <typename T> T extract_d(const json &j) {
     return j.at("d").template get<T>();
 }
 
 template <typename T>
 auto make_post(http_client *client, std::string_view target,
-               std::optional<std::string> body) -> net::awaitable<T> {
-    auto resp = co_await client->post(target, std::move(body));
+               std::optional<std::string> body,
+               std::optional<http_headers> headers = std::nullopt)
+    -> net::awaitable<T> {
+    auto resp =
+        co_await client->post(target, std::move(body), std::move(headers));
     verify(resp.result() == boost::beast::http::status::ok,
            "unexpected response: from {}: {}", target,
            static_cast<unsigned>(resp.result()));
@@ -90,7 +105,11 @@ auto rest_api::open_client(std::string_view target, int depth)
             // GET /Advanced.aspx?ots=WJFUMNFE
             // ots is the name of the cookie with the session token
             auto ots = extract_ots(t);
-            auto login_id = extract_login_id(get_http_body(response));
+            auto body = get_http_body(response);
+            auto login_id = extract_login_id(body);
+            account_id_ = extract_account_id(body);
+            get_market_details_url_ = std::format(
+                "/UTSAPI.asmx/GetMarketDetails?AccountID={}", account_id_);
             co_return std::make_pair(ots, login_id);
         }
         verify(response.result() == http::status::found,
@@ -113,8 +132,14 @@ auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
         std::format("{}://{}/Advanced.aspx?ots={}", std::string{url.scheme()},
                     url.host(), ots);
 
-    client_->default_headers().emplace("Origin", url.buffer());
+    std::string origin =
+        std::format("{}://{}", std::string(url.scheme()), url.host());
+
+    client_->default_headers().emplace("Origin", origin);
     client_->default_headers().emplace("Referer", referer);
+    client_->default_headers().emplace("Content-Type",
+                                       "application/json; charset=utf-8");
+    client_->default_headers().emplace("X-Requested-With", "XMLHttpRequest");
     co_return auth_info{token.value, login_id};
 }
 
@@ -124,19 +149,101 @@ auto rest_api::get_market_super_group()
         client_.get(), "/UTSAPI.asmx/GetMarketSuperGroup", std::nullopt);
 }
 
-auto rest_api::get_market_group(int id)
+auto rest_api::get_market_group(int super_group_id)
     -> awaitable<std::vector<market_group>> {
-    json body = {{"superGroupId", id}};
+    json body = {{"superGroupId", super_group_id}};
     co_return co_await make_post<std::vector<market_group>>(
         client_.get(), "/UTSAPI.asmx/GetMarketGroup", body.dump());
 }
 
-auto rest_api::get_market_quote(int id) -> awaitable<std::vector<market>> {
+auto rest_api::get_market_quote(int group_id)
+    -> awaitable<std::vector<market>> {
     json body = {
-        {"groupID", id},      {"keyword", ""},   {"popular", false},
-        {"portfolio", false}, {"search", false},
+        {"groupID", group_id}, {"keyword", ""},   {"popular", false},
+        {"portfolio", false},  {"search", false},
     };
     co_return co_await make_post<std::vector<market>>(
         client_.get(), "/UTSAPI.asmx/GetMarketQuote", body.dump());
 }
+
+auto rest_api::get_market_details(int market_id)
+    -> awaitable<market_details_response> {
+    json body = {{"marketID", market_id}};
+    co_return co_await make_post<market_details_response>(
+        client_.get(), get_market_details_url_, body.dump());
+}
+// auto rest_api::get_chart_url(int market_id) -> awaitable<boost::urls::url> {
+// json body = {{"getAdvancedChart", false}, {"marketID", market_id}};
+// co_return co_await make_post<boost::urls::url>(
+// client_.get(), "/UTSAPI.asmx/GetChartURL", body.dump());
+// }
+
+auto rest_api::backfill(int market_id, int quote_id, size_t sz,
+                        chart_duration dur) -> awaitable<std::vector<candle>> {
+    // auto chart_url = co_await get_chart_url(market_id);
+    // spdlog::info("chart url: {}", chart_url.buffer());
+
+    // FIXME
+    auto hc = http_client(co_await boost::asio::this_coro::executor,
+                          "charts.finsatechnology.com");
+    auto target = std::format("/data/minute/{}/mid?l={}", market_id, sz);
+    auto response = co_await hc.get(target);
+    auto j = json::parse(get_http_body(response));
+    auto data = j.at("data").get<std::vector<std::string>>();
+    auto rv = std::vector<candle>(sz);
+    for (size_t i = 0; i < sz; ++i) {
+        rv[i] = parse_candle(data[i]);
+    }
+    co_return rv;
+}
+
+auto rest_api::trade(const trade_request &request)
+    -> awaitable<trade_response> {
+    json body = {{"marketID", request.market_id},
+                 {"quoteID", request.quote_id},
+                 {"price", request.price},
+                 {"stake", std::to_string(request.stake)},
+                 {"tradeType", 1},
+                 {"tradeMode", request.dir == trade_request::direction::sell},
+                 {"hasClosingOrder", true},
+                 {"isGuaranteed", false},
+                 {"orderModeID", 3},
+                 {"orderTypeID", 2},
+                 {"orderPriceModeID", 2},
+                 {"limitOrderPrice", std::to_string(request.limit)},
+                 {"stopOrderPrice", std::to_string(request.stop)},
+                 {"trailingPoint", 0},
+                 {"closePositionID", 0},
+                 {"isKaazingFeed", true},
+                 {"userAgent", "Firefox (139.0)"},
+                 {"key", request.key}};
+    co_return co_await make_post<trade_response>(
+        client_.get(), "/UTSAPI.asmx/RequestTrade", body.dump(),
+        {{{"X-Requested-With", "XMLHttpRequest"}}});
+}
+
+auto rest_api::sim_trade(const trade_request &request) -> awaitable<void> {
+    json body = {{"marketID", request.market_id},
+                 {"quoteID", request.quote_id},
+                 {"price", request.price},
+                 {"stake", std::to_string(request.stake)},
+                 {"tradeType", 1},
+                 {"tradeMode", request.dir == trade_request::direction::sell},
+                 {"hasClosingOrder", true},
+                 {"isGuaranteed", false},
+                 {"orderModeID", 3},
+                 {"orderTypeID", 2},
+                 {"orderPriceModeID", 2},
+                 {"limitOrderPrice", std::to_string(request.limit)},
+                 {"stopOrderPrice", std::to_string(request.stop)},
+                 {"trailingPoint", 0},
+                 {"closePositionID", 0},
+                 {"isKaazingFeed", true},
+                 {"userAgent", "Firefox (139.0)"},
+                 {"key", request.key}};
+    co_await make_post<trade_response>(
+        client_.get(), "/UTSAPI.asmx/RequestTradeSimulate", body.dump());
+    co_return;
+}
+
 } // namespace td365

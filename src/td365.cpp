@@ -16,51 +16,10 @@
 #include <iostream>
 #include <spdlog/spdlog.h>
 
-// struct cancellable {
-//     void emit(net::cancellation_type ct = net::cancellation_type::all) {
-//         std::lock_guard<std::mutex> _(mtx);
-//
-//         for (auto &sig : sigs)
-//             sig.emit(ct);
-//     }
-//
-//     auto use_awaitable() {
-//         return boost::asio::bind_cancellation_slot(slot(),
-//                                                    boost::asio::use_awaitable);
-//     }
-//
-//     template <typename F> void spawn(boost::asio::any_io_executor ex, F &&f)
-//     {
-//         boost::asio::co_spawn(
-//             ex, f,
-//             boost::asio::bind_cancellation_slot(slot(),
-//             boost::asio::detached));
-//     }
-//
-//   protected:
-//     std::list<net::cancellation_signal> sigs;
-//     std::mutex mtx;
-//
-//     net::cancellation_slot slot() {
-//         std::lock_guard<std::mutex> _(mtx);
-//
-//         auto itr = std::find_if(sigs.begin(), sigs.end(),
-//                                 [](net::cancellation_signal &sig) {
-//                                     return !sig.slot().has_handler();
-//                                 });
-//
-//         if (itr != sigs.end()) {
-//             return itr->slot();
-//         }
-//         return sigs.emplace_back().slot();
-//     }
-// };
-
 namespace td365 {
 namespace net = boost::asio; // from <boost/asio.hpp>
 
-td365::td365(const user_callbacks &callbacks)
-    : ws_client_(callbacks), connect_f_(connect_p_.get_future()) {}
+td365::td365() : ws_client_(callbacks_), connect_f_(connect_p_.get_future()) {}
 
 td365::~td365() {
     if (io_thread_.joinable()) {
@@ -97,6 +56,8 @@ void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
                                                      shutdown_);
                 }
                 spdlog::info("message loop exiting");
+            } catch (const std::exception &e) {
+                spdlog::error("ws_client: {}", e.what());
             } catch (...) {
                 std::println(std::cerr, "ws_client: unknown exception");
                 connect_p_.set_exception(std::current_exception());
@@ -145,6 +106,34 @@ std::vector<market_group> td365::get_market_group(int id) {
 
 std::vector<market> td365::get_market_quote(int id) {
     return run_awaitable(rest_client_.get_market_quote(id));
+}
+
+market_details_response td365::get_market_details(int id) {
+    return run_awaitable((rest_client_.get_market_details(id)));
+}
+void td365::trade(const trade_request &&request) {
+    net::co_spawn(
+        io_context_,
+        [this, request = std::move(request)]() -> net::awaitable<void> {
+            try {
+                co_await rest_client_.get_market_details(request.market_id);
+                co_await rest_client_.sim_trade(request);
+                auto response = co_await rest_client_.trade(std::move(request));
+                callbacks_.trade_response_cb(std::move(response));
+            } catch (const std::exception &e) {
+                spdlog::error("trade exception: {}", e.what());
+            } catch (...) {
+                std::println(std::cerr, "trade: unknown exception");
+            }
+
+            co_return;
+        },
+        net::detached);
+}
+
+std::vector<candle> td365::backfill(int market_id, int quote_id, size_t sz,
+                                    chart_duration dur) {
+    return run_awaitable(rest_client_.backfill(market_id, quote_id, sz, dur));
 }
 
 template <typename Awaitable>

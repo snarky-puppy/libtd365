@@ -19,28 +19,38 @@
 
 namespace td365 {
 
+template <typename H>
+concept UserCallbacksLike = requires(H h, tick &&t, account_summary &&a,
+                                     account_details &&d, trade_details &&e) {
+    { h.on_tick(std::move(t)) } -> std::same_as<void>;
+    { h.on_account_summary(std::move(a)) } -> std::same_as<void>;
+    { h.on_account_details(std::move(d)) } -> std::same_as<void>;
+    { h.on_trade_established(std::move(e)) } -> std::same_as<void>;
+};
+
 class td365 {
   public:
-    explicit td365(const user_callbacks &);
+    explicit td365();
 
     ~td365();
+
+    user_callbacks &callbacks() { return callbacks_; }
 
     void connect(const std::string &username, const std::string &password,
                  const std::string &account_id);
 
     void connect();
 
-    void shutdown();
-
     void subscribe(int quote_id);
-
     void unsubscribe(int quote_id);
 
     std::vector<market_group> get_market_super_group();
-
     std::vector<market_group> get_market_group(int id);
-
     std::vector<market> get_market_quote(int id);
+    market_details_response get_market_details(int id);
+    void trade(const trade_request &&request);
+    std::vector<candle> backfill(int market_id, int quote_id, size_t sz,
+                                 chart_duration dur);
 
   private:
     template <typename Awaitable>
@@ -48,7 +58,7 @@ class td365 {
 
     auto run_awaitable(boost::asio::awaitable<void>) -> void;
 
-    user_callbacks ctx_;
+    user_callbacks callbacks_;
     boost::asio::io_context io_context_;
     std::thread io_thread_;
 

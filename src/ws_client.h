@@ -34,13 +34,9 @@ class ws_client {
 
     boost::asio::awaitable<void> send(const nlohmann::json &);
 
-    boost::asio::awaitable<void> close();
-
     boost::asio::awaitable<void> subscribe(int quote_id);
 
     boost::asio::awaitable<void> unsubscribe(int quote_id);
-
-    std::vector<tick> get_price_data(bool blocking);
 
     void wait_for_auth();
 
@@ -61,8 +57,10 @@ class ws_client {
     process_authentication_response(const nlohmann::json &msg);
 
     void process_price_data(const nlohmann::json &msg);
+    void process_account_summary(const nlohmann::json &msg);
+    void process_account_details(const nlohmann::json &msg);
 
-    user_callbacks callbacks_;
+    const user_callbacks &callbacks_;
     std::unique_ptr<ws> ws_;
     std::string supported_version_ = "1.0.0.6";
 

@@ -126,6 +126,16 @@ tick parse_tick(const std::string &price_string, grouping price_type) {
     return result;
 }
 
+template <typename T> T parse(std::string_view sv) {
+    T value{};
+    auto [ptr, ec] =
+        boost::charconv::from_chars(sv.data(), sv.data() + sv.size(), value);
+    verify(ec == std::errc(), "bad parse: {}", sv);
+    return value;
+}
+int parse_int(std::string_view sv) { return parse<int>(sv); }
+double parse_double(std::string_view sv) { return parse<double>(sv); }
+
 tick parse_tick2(std::string_view price_string, grouping price_type) {
     constexpr size_t EXPECTED_FIELDS = 13;
     std::array<std::string_view, EXPECTED_FIELDS> fields;
@@ -148,22 +158,6 @@ tick parse_tick2(std::string_view price_string, grouping price_type) {
     verify(idx == EXPECTED_FIELDS, "Invalid price data format: {}",
            price_string);
 
-    // helpers to parse integral/double
-    auto parse_int = [&](std::string_view sv) {
-        int value{};
-        auto [ptr, ec] = boost::charconv::from_chars(
-            sv.data(), sv.data() + sv.size(), value);
-        verify(ec == std::errc(), "bad int: {}", sv);
-        return value;
-    };
-    auto parse_double = [&](std::string_view sv) {
-        double value{};
-        auto [ptr, ec] = boost::charconv::from_chars(
-            sv.data(), sv.data() + sv.size(), value);
-        verify(ec == std::errc(), "bad double: {}", sv);
-        return value;
-    };
-
     // parse direction
     char d0 = fields[4].empty() ? '?' : fields[4][0];
     direction dir_value = (d0 == 'u'   ? direction::up
@@ -183,7 +177,7 @@ tick parse_tick2(std::string_view price_string, grouping price_type) {
             throw fail("Bad ticks: ", std::string(fields[11]));
     }
     int64_t unix_ns =
-        (windows_ticks - WINDOWS_TICKS_TO_UNIX_EPOCH) * TICKS_PER_NANOSECOND;
+        (windows_ticks - WINDOWS_TICKS_TO_UNIX_EPOCH) / TICKS_PER_NANOSECOND;
     auto timestamp_value = std::chrono::time_point<std::chrono::system_clock,
                                                    std::chrono::nanoseconds>{
         std::chrono::nanoseconds{unix_ns}};
@@ -206,5 +200,80 @@ tick parse_tick2(std::string_view price_string, grouping price_type) {
                 .field13 = parse_int(fields[12]),
                 .group = price_type,
                 .latency = latency_value};
+}
+
+auto parse_iso8601_sv(std::string_view sv)
+    -> std::chrono::time_point<std::chrono::system_clock> {
+    if (sv.size() != 25 || (sv[19] != '+' && sv[19] != '-'))
+        throw std::invalid_argument(
+            "Wrong format, expected YYYY-MM-DDThh:mm:ss±HH:MM");
+
+    auto to_int = [&](size_t pos, size_t len) {
+        return parse_int(sv.substr(pos, len));
+    };
+
+    // note the complete lack of error handling. YOLO.
+    std::tm tm{};
+    tm.tm_year = to_int(0, 4) - 1900;
+    tm.tm_mon = to_int(5, 2) - 1;
+    tm.tm_mday = to_int(8, 2);
+    tm.tm_hour = to_int(11, 2);
+    tm.tm_min = to_int(14, 2);
+    tm.tm_sec = to_int(17, 2);
+
+    // Convert to time_t (UTC)
+    // timegm is GNU extension; on Windows use _mkgmtime
+    std::time_t tt = timegm(&tm);
+
+    // Parse timezone offset
+    int sign = (sv[19] == '-') ? -1 : +1;
+    int off_h = to_int(20, 2);
+    int off_m = to_int(23, 2);
+    int offset_seconds = sign * (off_h * 3600 + off_m * 60);
+
+    // Adjust to UTC
+    tt -= offset_seconds;
+
+    return std::chrono::system_clock::from_time_t(tt);
+}
+
+candle parse_candle(std::string_view candle_string) {
+    constexpr size_t EXPECTED_FIELDS = 6;
+    std::array<std::string_view, EXPECTED_FIELDS> fields;
+    size_t idx = 0;
+
+    // "2025-06-16T07:32:00+00:00,107109.5,107155.5,107109.5,107128.5,29"
+    // 0. 2025-06-16T07:32:00+00:00
+    // 1. 107109.5
+    // 2. 107155.5
+    // 3. 107109.5
+    // 4. 107128.5
+    // 5. 29
+
+    // split on ',' into subranges
+    for (auto sub : candle_string | std::views::split(',') |
+                        std::views::transform([](auto rng) {
+                            auto first = rng.begin();
+                            auto len =
+                                std::ranges::size(rng); // unsigned size_t
+                            return std::string_view(&*first, len);
+                        })) {
+        if (idx < EXPECTED_FIELDS) {
+            fields[idx++] = sub;
+        } else {
+            break;
+        }
+    }
+    verify(idx == EXPECTED_FIELDS, "Invalid chart data format: {}",
+           candle_string);
+
+    return candle{
+        .timestamp = parse_iso8601_sv(fields[0]),
+        .open = parse_double(fields[1]),
+        .high = parse_double(fields[2]),
+        .low = parse_double(fields[3]),
+        .close = parse_double(fields[4]),
+        .volume = parse_double(fields[5]),
+    };
 }
 } // namespace td365

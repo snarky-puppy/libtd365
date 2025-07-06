@@ -50,7 +50,8 @@ payload_type string_to_payload_type(std::string_view str) {
         {"authenticationResponse", payload_type::authentication_response},
         {"subscribeResponse", payload_type::subscribe_response},
         {"p", payload_type::price_data},
-    };
+        {"accountSummary", payload_type::account_summary},
+        {"accountDetails", payload_type::account_details}};
 
     auto it = lookup.find(str);
     return (it != lookup.end()) ? it->second : payload_type::unknown;
@@ -134,6 +135,12 @@ ws_client::message_loop(const std::string &login_id, const std::string &token,
         case payload_type::price_data:
             process_price_data(msg);
             break;
+        case payload_type::account_summary:
+            process_account_summary(msg);
+            break;
+        case payload_type::account_details:
+            process_account_details(msg);
+            break;
         default:
             std::cerr << "Unhandled message" << msg.dump() << std::endl;
         }
@@ -188,6 +195,7 @@ ws_client::process_authentication_response(const nlohmann::json &msg) {
     connection_id_ = msg["cid"].get<std::string>();
 
     // subscribe to account summary
+    // nb, no constexpr json yet
     co_await send({{"data", "{\"SubscribeToAccountSummary\":true,"
                             "\"SubscribeToAccountDetails\":true}"},
                    {"action", "options"}});
@@ -210,7 +218,7 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
             it != data.end() && it->is_array() && !it->empty()) {
             auto prices = it->get<std::vector<std::string>>();
             for (const auto &price : prices) {
-                callbacks_.on_tick(parse_tick2(price, key.second));
+                callbacks_.tick_cb(parse_tick2(price, key.second));
             }
         }
     }
@@ -222,8 +230,24 @@ void ws_client::process_subscribe_response(const nlohmann::json &msg) {
     auto prices = d["Current"].get<std::vector<std::string>>();
     auto g = string_to_price_type(d["PriceGrouping"].get<std::string>());
     for (const auto &p : prices) {
-        callbacks_.on_tick(parse_tick(p, g));
+        callbacks_.tick_cb(parse_tick(p, g));
     }
+}
+
+void ws_client::process_account_summary(const nlohmann::json &msg) {
+    spdlog::info("account summary received: {}", msg.dump());
+    if (msg.at("d").at("PlatformID").get<int>() == 0) {
+        spdlog::info("account summary: skip platform 0:", msg.dump());
+        return;
+    }
+    auto summary = msg["d"].get<account_summary>();
+    callbacks_.acc_summary_cb(std::move(summary));
+}
+
+void ws_client::process_account_details(const nlohmann::json &msg) {
+    spdlog::info("account details received: {}", msg.dump());
+    auto details = msg["d"].get<account_details>();
+    callbacks_.acc_detail_cb(std::move(details));
 }
 
 void ws_client::wait_for_auth() { auth_f_.get(); }

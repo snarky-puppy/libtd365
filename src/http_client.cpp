@@ -42,16 +42,14 @@ constexpr auto create_default_headers() {
     hdrs.emplace(to_string(http::field::user_agent), UserAgent);
     hdrs.emplace(to_string(http::field::accept), "*/*");
     hdrs.emplace(to_string(http::field::accept_language), "en-US,en;q=0.5");
-    hdrs.emplace(to_string(http::field::content_type),
-                 "application/json; charset=utf-8");
     hdrs.emplace(to_string(http::field::accept_encoding), "gzip");
     hdrs.emplace(to_string(http::field::connection), "keep-alive");
     return hdrs;
 }
 
 const auto no_headers = http_headers{};
-const auto application_json_headers =
-    http_headers{{to_string(http::field::content_type), "application/json"}};
+const auto application_json_headers = http_headers{
+    {to_string(http::field::content_type), "application/json; charset=utf-8"}};
 
 http_client::http_client(boost::asio::any_io_executor ex, std::string host)
     : stream_(ex, ssl_ctx()), host_(std::move(host)), jar_(host_ + ".cookies"),
@@ -81,13 +79,12 @@ awaitable<void> http_client::ensure_connected() {
 
 boost::asio::awaitable<http_response>
 http_client::send(boost::beast::http::verb verb, std::string_view target,
-                  http_headers const &headers,
-                  std::optional<std::string> body) {
+                  std::optional<std::string> body,
+                  std::optional<http_headers> headers) {
     co_await ensure_connected();
     auto ex = co_await boost::asio::this_coro::executor;
 
     auto req = http::request<http::string_body>{verb, target, 11};
-    req.set(http::field::accept_encoding, "gzip"); // ensure this is set
 
     if (!default_headers_.empty()) {
         for (const auto &[name, value] : default_headers_) {
@@ -95,8 +92,8 @@ http_client::send(boost::beast::http::verb verb, std::string_view target,
         }
     }
 
-    if (!headers.empty()) {
-        for (const auto &[name, value] : headers) {
+    if (headers.has_value()) {
+        for (const auto &[name, value] : headers.value()) {
             req.insert(name, value);
         }
     }
@@ -142,14 +139,14 @@ http_client::send(boost::beast::http::verb verb, std::string_view target,
 }
 
 awaitable<http_response> http_client::get(std::string_view target,
-                                          http_headers const &headers) {
-    co_return co_await send(http::verb::get, target, headers, std::nullopt);
+                                          std::optional<http_headers> headers) {
+    co_return co_await send(http::verb::get, target, std::nullopt, headers);
 }
 
-awaitable<http_response> http_client::post(std::string_view target,
-                                           std::optional<std::string> body,
-                                           http_headers const &headers) {
-    co_return co_await send(http::verb::post, target, headers, std::move(body));
+awaitable<http_response>
+http_client::post(std::string_view target, std::optional<std::string> body,
+                  std::optional<http_headers> headers) {
+    co_return co_await send(http::verb::post, target, body, headers);
 }
 
 } // namespace td365

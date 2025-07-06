@@ -37,12 +37,12 @@ target_link_libraries(td365 PUBLIC ${Boost_LIBRARIES} ZLIB::ZLIB OpenSSL::SSL Op
 target_include_directories(td365_static PUBLIC src ${Boost_INCLUDE_DIRS})
 target_link_libraries(td365_static PUBLIC ${Boost_LIBRARIES} ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json spdlog::spdlog_header_only)
 
-add_executable(subscribe_test examples/subscribe_test.cpp)
-target_include_directories(subscribe_test PUBLIC td365)
-target_link_libraries(subscribe_test PUBLIC td365)
+add_executable(trade_test examples/trade_test.cpp)
+target_include_directories(trade_test PUBLIC td365)
+target_link_libraries(trade_test PUBLIC td365)
 
-target_compile_options(subscribe_test PUBLIC -fsanitize=address -g -O1)
-target_link_options(subscribe_test PUBLIC -fsanitize=address)
+target_compile_options(trade_test PUBLIC -fsanitize=address -g -O1)
+target_link_options(trade_test PUBLIC -fsanitize=address)
 
 add_executable(test1 examples/test1.cpp)
 target_compile_options(test1 PUBLIC -fsanitize=address -g)
