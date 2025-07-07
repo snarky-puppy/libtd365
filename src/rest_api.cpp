@@ -178,8 +178,9 @@ auto rest_api::get_market_details(int market_id)
 // client_.get(), "/UTSAPI.asmx/GetChartURL", body.dump());
 // }
 
-auto rest_api::backfill(int market_id, int quote_id, size_t sz,
-                        chart_duration dur) -> awaitable<std::vector<candle>> {
+auto rest_api::backfill(int market_id, int /*quote_id*/, size_t sz,
+                        chart_duration /*dur*/)
+    -> awaitable<std::vector<candle>> {
     // auto chart_url = co_await get_chart_url(market_id);
     // spdlog::info("chart url: {}", chart_url.buffer());
 
@@ -217,9 +218,10 @@ auto rest_api::trade(const trade_request &request)
                  {"isKaazingFeed", true},
                  {"userAgent", "Firefox (139.0)"},
                  {"key", request.key}};
-    co_return co_await make_post<trade_response>(
-        client_.get(), "/UTSAPI.asmx/RequestTrade", body.dump(),
-        {{{"X-Requested-With", "XMLHttpRequest"}}});
+
+    auto result = co_await make_post<trade_response>(
+        client_.get(), "/UTSAPI.asmx/RequestTrade", body.dump());
+    co_return result;
 }
 
 auto rest_api::sim_trade(const trade_request &request) -> awaitable<void> {

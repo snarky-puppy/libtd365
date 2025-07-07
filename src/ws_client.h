@@ -13,6 +13,8 @@
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/url/url_view.hpp>
+#include <boost/url/url.hpp>
+#include <chrono>
 #include <future>
 #include <nlohmann/json_fwd.hpp>
 #include <string>
@@ -31,6 +33,11 @@ class ws_client {
     boost::asio::awaitable<void> message_loop(const std::string &login_id,
                                               const std::string &token,
                                               std::atomic<bool> &shutdown);
+
+    boost::asio::awaitable<void> run_with_reconnect(boost::urls::url_view url,
+                                                   const std::string &login_id,
+                                                   const std::string &token,
+                                                   std::atomic<bool> &shutdown);
 
     boost::asio::awaitable<void> send(const nlohmann::json &);
 
@@ -70,5 +77,10 @@ class ws_client {
 
     std::promise<void> auth_p_;
     std::future<void> auth_f_;
+
+    // Reconnection state
+    boost::urls::url stored_url_;
+    std::chrono::milliseconds reconnect_delay_ = std::chrono::milliseconds(1000);
+    int max_reconnect_attempts_ = 5;
 };
 } // namespace td365

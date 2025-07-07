@@ -231,7 +231,7 @@ struct account_details {
     int client_id;
     int client_language_id;
     currency_set currencies;
-    opening_orders opening_orders;
+    opening_orders opening_orders_data;
     position_set positions;
     std::string trading_account_type;
 };
@@ -298,7 +298,7 @@ struct client_web_option_info {
 };
 
 struct market_details_response {
-    market_details market_details;
+    market_details market_details_data;
     client_web_option_info web_info;
 };
 

@@ -37,7 +37,7 @@ namespace ssl = boost::asio::ssl;
 
 constexpr auto const kBodySizeLimit = 128U * 1024U * 1024U; // 128 M
 
-constexpr auto create_default_headers() {
+auto create_default_headers() {
     http_headers hdrs;
     hdrs.emplace(to_string(http::field::user_agent), UserAgent);
     hdrs.emplace(to_string(http::field::accept), "*/*");
@@ -47,8 +47,8 @@ constexpr auto create_default_headers() {
     return hdrs;
 }
 
-const auto no_headers = http_headers{};
-const auto application_json_headers = http_headers{
+const http_headers no_headers{};
+const http_headers application_json_headers{
     {to_string(http::field::content_type), "application/json; charset=utf-8"}};
 
 http_client::http_client(boost::asio::any_io_executor ex, std::string host)

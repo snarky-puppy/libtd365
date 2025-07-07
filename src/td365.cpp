@@ -14,6 +14,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/detached.hpp>
 #include <iostream>
+#include <print>
 #include <spdlog/spdlog.h>
 
 namespace td365 {

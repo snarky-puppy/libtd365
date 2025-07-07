@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/lexical_cast.hpp>
 #include <cstdlib>
 #include <iostream>
@@ -123,6 +124,7 @@ ws_client::message_loop(const std::string &login_id, const std::string &token,
             break;
         case payload_type::reconnect_response:
             co_await process_reconnect_response(msg);
+            break;
         case payload_type::heartbeat:
             co_await process_heartbeat(msg);
             break;
@@ -171,7 +173,7 @@ ws_client::process_reconnect_response(const nlohmann::json &msg) {
 }
 
 boost::asio::awaitable<void>
-ws_client::process_connect_response(const nlohmann::json &msg,
+ws_client::process_connect_response(const nlohmann::json &,
                                     const std::string &login_id,
                                     const std::string &token) {
     co_await send({{"action", "authentication"},
@@ -251,5 +253,62 @@ void ws_client::process_account_details(const nlohmann::json &msg) {
 }
 
 void ws_client::wait_for_auth() { auth_f_.get(); }
+
+boost::asio::awaitable<void> ws_client::run_with_reconnect(
+    boost::urls::url_view url, const std::string &login_id,
+    const std::string &token, std::atomic<bool> &shutdown) {
+    stored_url_ = boost::urls::url(url);
+    int reconnect_attempts = 0;
+    auto executor = co_await net::this_coro::executor;
+
+    while (!shutdown && reconnect_attempts < max_reconnect_attempts_) {
+        bool need_delay = false;
+        std::chrono::milliseconds delay{0};
+        
+        try {
+            spdlog::info("Attempting to connect... (attempt {}/{})",
+                         reconnect_attempts + 1, max_reconnect_attempts_);
+
+            // Reset auth promise for each connection attempt
+            auth_p_ = std::promise<void>();
+            auth_f_ = auth_p_.get_future();
+
+            // Connect to server
+            co_await connect(stored_url_);
+
+            // Reset reconnect attempts on successful connection
+            reconnect_attempts = 0;
+
+            // Run message loop
+            co_await message_loop(login_id, token, shutdown);
+
+        } catch (const boost::system::system_error &e) {
+            if (shutdown) {
+                spdlog::info("Shutting down connection");
+                break;
+            }
+
+            spdlog::error("Connection failed: {}", e.what());
+            reconnect_attempts++;
+
+            if (reconnect_attempts < max_reconnect_attempts_) {
+                delay = reconnect_delay_ * reconnect_attempts; // exponential backoff
+                spdlog::info("Reconnecting in {}ms...", delay.count());
+                need_delay = true;
+            } else {
+                spdlog::error("Max reconnection attempts reached. Giving up.");
+                throw;
+            }
+        }
+        
+        if (need_delay) {
+            net::steady_timer timer(executor);
+            timer.expires_after(delay);
+            co_await timer.async_wait(net::use_awaitable);
+        }
+    }
+
+    co_return;
+}
 
 } // namespace td365

@@ -42,7 +42,7 @@ std::ostream &operator<<(std::ostream &os, const tick &t) {
        << ", time: "
        << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S") << '.'
        << std::setw(3) << std::setfill('0') << ms.count()
-       << ", latency: " << (t.latency.count() / 1000000.0) << "ms"
+       << ", latency: " << (t.latency.count() / 1000000) << "ms"
        << ", type: " << t.group << " }";
     return os;
 }
@@ -326,7 +326,7 @@ void to_json(nlohmann::json &, const trade_response &) {}
 void from_json(const nlohmann::json &, trade_response &) {}
 
 void from_json(const nlohmann::json &j, market_details_response &r) {
-    j.at("marketDetails").get_to(r.market_details);
+    j.at("marketDetails").get_to(r.market_details_data);
     j.at("webInfo").get_to(r.web_info);
 }
 
@@ -529,7 +529,7 @@ void to_json(nlohmann::json &j, account_details const &a) {
                        {"ClientId", a.client_id},
                        {"ClientLanguageId", a.client_language_id},
                        {"Currencies", a.currencies},
-                       {"OpeningOrders", a.opening_orders},
+                       {"OpeningOrders", a.opening_orders_data},
                        {"Positions", a.positions},
                        {"TradingAccountType", a.trading_account_type}};
 }
@@ -546,9 +546,9 @@ void from_json(nlohmann::json const &j, account_details &a) {
     else
         a.currencies.total_records = 0;
     if (j.contains("OpeningOrders"))
-        j.at("OpeningOrders").get_to(a.opening_orders);
+        j.at("OpeningOrders").get_to(a.opening_orders_data);
     else
-        a.opening_orders.total_records = 0;
+        a.opening_orders_data.total_records = 0;
     if (j.contains("Positions"))
         j.at("Positions").get_to(a.positions);
     else
