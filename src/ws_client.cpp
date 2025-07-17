@@ -60,7 +60,8 @@ payload_type string_to_payload_type(std::string_view str) {
 
 bool is_error_continuable(const boost::system::error_code &ec) {
     if (ec == boost::asio::error::operation_aborted ||
-        ec == boost::beast::websocket::error::closed)
+        ec == boost::beast::websocket::error::closed ||
+        ec == boost::asio::ssl::error::stream_truncated)
         return true;
     return false;
 }
@@ -68,9 +69,28 @@ bool is_error_continuable(const boost::system::error_code &ec) {
 ws_client::ws_client(const user_callbacks &callbacks)
     : callbacks_(callbacks), auth_f_(auth_p_.get_future()) {}
 
-ws_client::~ws_client() {}
+ws_client::~ws_client() {
+    // Ensure that any ongoing future operations are cancelled
+    // This is important for the auth_f_ future that might be waited on
+    try {
+        if (auth_f_.valid() && auth_f_.wait_for(std::chrono::seconds(0)) ==
+                                   std::future_status::timeout) {
+            // If the promise hasn't been set, set it to avoid blocking
+            auth_p_.set_value();
+        }
+    } catch (const std::future_error &) {
+        // Promise already set or moved, ignore
+    } catch (...) {
+        // Ignore other exceptions during cleanup
+    }
+
+    // The ws_ unique_ptr will automatically clean up when destroyed
+    // This is safe because the destructor is only called after all
+    // coroutines using this object have completed
+}
 
 boost::asio::awaitable<void> ws_client::connect(boost::urls::url_view u) {
+    spdlog::info("ws_client: connecting to {}", u.buffer());
     ws_ = std::make_unique<ws>();
     return ws_->connect(u);
 }
@@ -111,8 +131,12 @@ ws_client::message_loop(const std::string &login_id, const std::string &token,
             spdlog::error("ws_client::message_loop: read_message failed: {}",
                           ec.message());
             if (is_error_continuable(ec)) {
+                // FIXME
+                auth_p_ = std::promise<void>();
+                auth_f_ = auth_p_.get_future();
                 co_return;
             }
+            spdlog::info("ws_client::message_loop: not continuable");
             throw ec;
         }
 
@@ -254,61 +278,14 @@ void ws_client::process_account_details(const nlohmann::json &msg) {
 
 void ws_client::wait_for_auth() { auth_f_.get(); }
 
-boost::asio::awaitable<void> ws_client::run_with_reconnect(
-    boost::urls::url_view url, const std::string &login_id,
-    const std::string &token, std::atomic<bool> &shutdown) {
-    stored_url_ = boost::urls::url(url);
-    int reconnect_attempts = 0;
-    auto executor = co_await net::this_coro::executor;
-
-    while (!shutdown && reconnect_attempts < max_reconnect_attempts_) {
-        bool need_delay = false;
-        std::chrono::milliseconds delay{0};
-        
-        try {
-            spdlog::info("Attempting to connect... (attempt {}/{})",
-                         reconnect_attempts + 1, max_reconnect_attempts_);
-
-            // Reset auth promise for each connection attempt
-            auth_p_ = std::promise<void>();
-            auth_f_ = auth_p_.get_future();
-
-            // Connect to server
-            co_await connect(stored_url_);
-
-            // Reset reconnect attempts on successful connection
-            reconnect_attempts = 0;
-
-            // Run message loop
-            co_await message_loop(login_id, token, shutdown);
-
-        } catch (const boost::system::system_error &e) {
-            if (shutdown) {
-                spdlog::info("Shutting down connection");
-                break;
-            }
-
-            spdlog::error("Connection failed: {}", e.what());
-            reconnect_attempts++;
-
-            if (reconnect_attempts < max_reconnect_attempts_) {
-                delay = reconnect_delay_ * reconnect_attempts; // exponential backoff
-                spdlog::info("Reconnecting in {}ms...", delay.count());
-                need_delay = true;
-            } else {
-                spdlog::error("Max reconnection attempts reached. Giving up.");
-                throw;
-            }
-        }
-        
-        if (need_delay) {
-            net::steady_timer timer(executor);
-            timer.expires_after(delay);
-            co_await timer.async_wait(net::use_awaitable);
-        }
+boost::asio::awaitable<void> ws_client::run(boost::urls::url_view url,
+                                            const std::string &login_id,
+                                            const std::string &token,
+                                            std::atomic<bool> &shutdown) {
+    while (!shutdown.load()) {
+        co_await connect(url);
+        co_await message_loop(login_id, token, shutdown);
     }
-
-    co_return;
 }
 
 } // namespace td365

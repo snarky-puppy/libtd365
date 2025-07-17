@@ -116,7 +116,12 @@ td_resolve(boost::urls::url_view url) {
         }
     } else {
         h = std::string(url.host());
-        p = url.has_port() ? std::string(url.port()) : "443";
+        if (url.has_port()) {
+            p = std::string(url.port());
+        } else {
+            // Default ports based on scheme
+            p = (url.scheme() == "wss") ? "443" : "80";
+        }
     }
 
     auto ep = co_await resolver.async_resolve(h, p);

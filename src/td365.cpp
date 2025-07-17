@@ -51,11 +51,8 @@ void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
                     co_await rest_client_.connect(auth_detail.platform_url);
 
                 connect_p_.set_value();
-                while (!shutdown_) {
-                    co_await ws_client_.connect(auth_detail.sock_host);
-                    co_await ws_client_.message_loop(login_id, token,
-                                                     shutdown_);
-                }
+                co_await ws_client_.run(auth_detail.sock_host, login_id, token,
+                                        shutdown_);
                 spdlog::info("message loop exiting");
             } catch (const std::exception &e) {
                 spdlog::error("ws_client: {}", e.what());

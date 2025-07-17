@@ -10,13 +10,16 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
+#include <boost/beast/ssl/ssl_stream.hpp>
 #include <boost/url/url.hpp>
 #include <string>
 #include <string_view>
 
 namespace td365 {
-using websocket_type = boost::beast::websocket::stream<
-    boost::asio::ssl::stream<boost::beast::tcp_stream>>;
+using ssl_websocket_type = boost::beast::websocket::stream<
+    boost::beast::ssl_stream<boost::beast::tcp_stream>>;
+using plain_websocket_type =
+    boost::beast::websocket::stream<boost::beast::tcp_stream>;
 
 class ws {
   public:
@@ -32,6 +35,8 @@ class ws {
     read_message();
 
   private:
-    std::unique_ptr<websocket_type> ws_;
+    std::unique_ptr<ssl_websocket_type> ssl_ws_;
+    std::unique_ptr<plain_websocket_type> plain_ws_;
+    bool using_ssl_;
 };
 } // namespace td365

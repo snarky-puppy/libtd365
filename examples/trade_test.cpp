@@ -156,7 +156,7 @@ struct strategy {
             buy(t);
         }
         n_ticks++;
-        spdlog::info("tick: {}", n_ticks);
+        // spdlog::info("tick: {}", n_ticks);
         switch (signals.on_tick(t)) {
         case signals::value::none:
             break;
@@ -197,11 +197,12 @@ struct strategy {
         });
     }
 
-    void on_account_summary(td365::account_summary &&) {
-        spdlog::info("on_account_summary");
+    void on_account_summary(td365::account_summary &&summary) {
+        spdlog::info("on_account_summary: balance={}", summary.account_balance);
     }
-    void on_account_details(td365::account_details &&) {
-        spdlog::info("on_account_details");
+    void on_account_details(td365::account_details &&details) {
+        spdlog::info("on_account_details: positions={}",
+                     details.positions.total_records);
     }
 
     void on_trade_response(td365::trade_response &&) {
@@ -252,8 +253,6 @@ int main(int, char **) {
     strat.setup_subscription();
     strat.backfill();
 
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
-        work_guard(ioc.get_executor());
     ioc.run();
 
     return 0;

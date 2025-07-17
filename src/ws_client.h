@@ -12,8 +12,8 @@
 
 #include <atomic>
 #include <boost/asio.hpp>
-#include <boost/url/url_view.hpp>
 #include <boost/url/url.hpp>
+#include <boost/url/url_view.hpp>
 #include <chrono>
 #include <future>
 #include <nlohmann/json_fwd.hpp>
@@ -34,11 +34,6 @@ class ws_client {
                                               const std::string &token,
                                               std::atomic<bool> &shutdown);
 
-    boost::asio::awaitable<void> run_with_reconnect(boost::urls::url_view url,
-                                                   const std::string &login_id,
-                                                   const std::string &token,
-                                                   std::atomic<bool> &shutdown);
-
     boost::asio::awaitable<void> send(const nlohmann::json &);
 
     boost::asio::awaitable<void> subscribe(int quote_id);
@@ -46,6 +41,11 @@ class ws_client {
     boost::asio::awaitable<void> unsubscribe(int quote_id);
 
     void wait_for_auth();
+
+    boost::asio::awaitable<void> run(boost::urls::url_view url,
+                                     const std::string &login_id,
+                                     const std::string &token,
+                                     std::atomic<bool> &shutdown);
 
   private:
     void process_subscribe_response(const nlohmann::json &msg);
@@ -80,7 +80,8 @@ class ws_client {
 
     // Reconnection state
     boost::urls::url stored_url_;
-    std::chrono::milliseconds reconnect_delay_ = std::chrono::milliseconds(1000);
+    std::chrono::milliseconds reconnect_delay_ =
+        std::chrono::milliseconds(1000);
     int max_reconnect_attempts_ = 5;
 };
 } // namespace td365

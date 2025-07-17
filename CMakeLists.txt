@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.30)
 
 set(CMAKE_TOOLCHAIN_FILE
         "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # clang has no documentation installed on MacOS
 # https://releases.llvm.org/4.0.0/tools/clang/docs/DiagnosticsReference.html#wall
-add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -fno-omit-frame-pointer)
+add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wconversion -fno-omit-frame-pointer)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
 add_library(td365 SHARED ${SOURCES})
