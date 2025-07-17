@@ -44,11 +44,6 @@ target_link_libraries(trade_test PUBLIC td365)
 target_compile_options(trade_test PUBLIC -fsanitize=address -g -O1)
 target_link_options(trade_test PUBLIC -fsanitize=address)
 
-add_executable(test1 examples/test1.cpp)
-target_compile_options(test1 PUBLIC -fsanitize=address -g)
-target_link_options(test1 PUBLIC -fsanitize=address)
-target_include_directories(test1 PUBLIC td365)
-target_link_libraries(test1 PUBLIC td365)
 
 # ----------------------------------------------------------------------------
 enable_testing()
