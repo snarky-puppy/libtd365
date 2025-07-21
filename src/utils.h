@@ -15,17 +15,16 @@
 #include <boost/url/url.hpp>
 
 namespace td365 {
-nlohmann::json extract_jwt_payload(const nlohmann::json &jwt);
+    nlohmann::json extract_jwt_payload(const nlohmann::json &jwt);
 
-boost::asio::ssl::context &ssl_ctx();
+    boost::asio::ssl::context &ssl_ctx();
 
-std::string now_utc();
+    std::string now_utc();
 
-boost::urls::url check_proxy_url();
+    boost::urls::url check_proxy_url();
 
-std::string get_http_body(http_response const &res);
+    std::string get_http_body(http_response const &res);
 
-boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
-td_resolve(boost::urls::url_view url);
-
+    boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
+    td_resolve(std::string_view host, std::string_view port);
 } // namespace td365
