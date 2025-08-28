@@ -119,7 +119,7 @@ namespace td365 {
             p = port;
         }
 
-        auto ep = co_await resolver.async_resolve(h, p);
+        auto ep = co_await resolver.async_resolve(h, p, boost::asio::use_awaitable);
         co_return ep;
     }
 } // namespace td365

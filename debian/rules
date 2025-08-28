@@ -3,6 +3,13 @@
 export DH_VERBOSE = 1
 export CMAKE_BUILD_PARALLEL_LEVEL = $(shell nproc)
 
+# Disable LTO to work around gcc-14 internal compiler error
+export DEB_CXXFLAGS_MAINT_STRIP = -flto=auto
+export DEB_CFLAGS_MAINT_STRIP = -flto=auto
+export DEB_LDFLAGS_MAINT_STRIP = -flto=auto
+export CMAKE_C_FLAGS_RELEASE = -O3 -DNDEBUG
+export CMAKE_CXX_FLAGS_RELEASE = -O3 -DNDEBUG
+
 %:
 	dh $@ --buildsystem=cmake
 

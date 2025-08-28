@@ -9,7 +9,7 @@
 
 #include "types.h"
 
-#include <boost/charconv.hpp>
+#include <charconv>
 #include <iomanip>
 #include <iostream>
 #include <ranges>
@@ -133,7 +133,7 @@ namespace td365 {
     T parse(std::string_view sv) {
         T value{};
         auto [ptr, ec] =
-                boost::charconv::from_chars(sv.data(), sv.data() + sv.size(), value);
+                std::from_chars(sv.data(), sv.data() + sv.size(), value);
         verify(ec == std::errc(), "bad parse: {}", sv);
         return value;
     }
@@ -176,7 +176,7 @@ namespace td365 {
         constexpr int64_t TICKS_PER_NANOSECOND = 100; // 100 ns
 
         int64_t windows_ticks{}; {
-            auto [ptr, ec] = boost::charconv::from_chars(
+            auto [ptr, ec] = std::from_chars(
                 fields[11].data(), fields[11].data() + fields[11].size(),
                 windows_ticks);
             if (ec != std::errc())

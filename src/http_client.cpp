@@ -71,9 +71,9 @@ namespace td365 {
             }
 
             auto const ep = co_await td_resolve(host_, "443");
-            co_await beast::get_lowest_layer(stream_).async_connect(*ep.begin());
+            co_await beast::get_lowest_layer(stream_).async_connect(*ep.begin(), boost::asio::use_awaitable);
 
-            co_await stream_.async_handshake(ssl::stream_base::client);
+            co_await stream_.async_handshake(ssl::stream_base::client, boost::asio::use_awaitable);
         }
 
         co_return;

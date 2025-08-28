@@ -10,7 +10,7 @@
 #include "utils.h"
 
 #include <boost/beast/http/field.hpp>
-#include <boost/beast/http/message_fwd.hpp>
+#include <boost/beast/http/message.hpp>
 #include <cctype>
 #include <ctime>
 #include <fstream>

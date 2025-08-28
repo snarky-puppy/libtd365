@@ -54,7 +54,7 @@ namespace td365 {
             beast::get_lowest_layer(*ssl_ws_).expires_after(
                 std::chrono::seconds(30));
 
-            co_await beast::get_lowest_layer(*ssl_ws_).async_connect(ep);
+            co_await beast::get_lowest_layer(*ssl_ws_).async_connect(ep, use_awaitable);
 
             // Set SNI Hostname (many hosts need this to handshake successfully)
             if (!SSL_set_tlsext_host_name(ssl_ws_->next_layer().native_handle(),
@@ -75,7 +75,7 @@ namespace td365 {
 
             // Perform the SSL handshake
             co_await ssl_ws_->next_layer().async_handshake(
-                ssl::stream_base::client);
+                ssl::stream_base::client, use_awaitable);
 
             // Turn off the timeout on the tcp_stream, because
             // the websocket stream has its own timeout system.
@@ -96,7 +96,7 @@ namespace td365 {
             beast::get_lowest_layer(*plain_ws_)
                     .expires_after(std::chrono::seconds(30));
 
-            co_await beast::get_lowest_layer(*plain_ws_).async_connect(ep);
+            co_await beast::get_lowest_layer(*plain_ws_).async_connect(ep, use_awaitable);
 
             // Set a decorator to change the User-Agent of the handshake
             plain_ws_->set_option(
@@ -124,20 +124,20 @@ namespace td365 {
         if (using_ssl_) {
             get_lowest_layer(*ssl_ws_).expires_after(std::chrono::seconds(1));
             co_await ssl_ws_->async_close(
-                boost::beast::websocket::close_code::normal);
+                boost::beast::websocket::close_code::normal, use_awaitable);
         } else {
             get_lowest_layer(*plain_ws_).expires_after(std::chrono::seconds(1));
             co_await plain_ws_->async_close(
-                boost::beast::websocket::close_code::normal);
+                boost::beast::websocket::close_code::normal, use_awaitable);
         }
         co_return;
     }
 
     boost::asio::awaitable<void> ws::send(std::string_view message) {
         if (using_ssl_) {
-            co_await ssl_ws_->async_write(net::buffer(message));
+            co_await ssl_ws_->async_write(net::buffer(message), use_awaitable);
         } else {
-            co_await plain_ws_->async_write(net::buffer(message));
+            co_await plain_ws_->async_write(net::buffer(message), use_awaitable);
         }
         if (is_debug_enabled()) {
             std::cout << ">> " << message << std::endl;

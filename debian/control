@@ -9,7 +9,10 @@ Build-Depends: debhelper-compat (= 13),
                nlohmann-json3-dev,
                zlib1g-dev,
                libspdlog-dev,
-               catch2
+               catch2,
+               libbz2-dev,
+               liblzma-dev,
+               libzstd-dev
 Standards-Version: 4.6.0
 Homepage: https://github.com/snarky-puppy/td365
 Vcs-Git: https://github.com/snarky-puppy/td365.git

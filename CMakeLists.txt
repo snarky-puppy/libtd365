@@ -6,6 +6,8 @@ set(CMAKE_TOOLCHAIN_FILE
 
 project(td365)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -16,15 +18,21 @@ add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wconversion -fno-omit-fram
 file(GLOB_RECURSE SOURCES src/*.cpp)
 add_library(td365 SHARED ${SOURCES})
 add_library(td365_static STATIC ${SOURCES})
+
+# Set version information
+set_target_properties(td365 PROPERTIES 
+    VERSION 1.0.0 
+    SOVERSION 1
+)
 set_target_properties(td365_static PROPERTIES OUTPUT_NAME td365)
 
 set(Boost_VERBOSE ON)
 set(Boost_DEBUG ON)
-set(Boost_USE_STATIC_LIBS ON) # only find static libs
+set(Boost_USE_STATIC_LIBS OFF) # use shared libs for debian package
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF) # do not look for boost libraries linked against static C++ std lib
 
-find_package(Boost REQUIRED COMPONENTS system thread url iostreams charconv)
+find_package(Boost REQUIRED COMPONENTS system thread url iostreams)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -69,3 +77,11 @@ catch_discover_tests(td365_tests
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         REPORT_QUIET
 )
+
+# Install targets
+install(TARGETS td365 LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS td365_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# Install headers
+file(GLOB HEADERS src/*.h src/*.hpp)
+install(FILES ${HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/td365)

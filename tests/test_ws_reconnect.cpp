@@ -90,7 +90,8 @@ class fake_ws_server {
 
             json j = {{"t", "connectResponse"}};
             co_await ws.async_write(
-                net::buffer(j.dump().c_str(), j.dump().size() + 1));
+                net::buffer(j.dump().c_str(), j.dump().size() + 1),
+                boost::asio::use_awaitable);
 
             if (disconnect_after_connect_) {
                 // Wait for specified delay then disconnect
