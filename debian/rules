@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+export CMAKE_BUILD_PARALLEL_LEVEL = $(shell nproc)
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	# Disable vcpkg to use system packages
+	unset VCPKG_ROOT && \
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_CXX_STANDARD=23 \
+		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_TOOLCHAIN_FILE=""
+
+override_dh_auto_build:
+	dh_auto_build -- td365 td365_static
+
+override_dh_auto_test:
+	# Skip tests during package build to avoid dependency issues
+	# Tests can be run separately if needed
+
+override_dh_install:
+	dh_install
+	# Install headers
+	mkdir -p debian/libtd365-dev/usr/include/td365
+	cp src/*.h debian/libtd365-dev/usr/include/td365/
+	cp src/*.hpp debian/libtd365-dev/usr/include/td365/

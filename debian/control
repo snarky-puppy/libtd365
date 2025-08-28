@@ -1,0 +1,49 @@
+Source: libtd365
+Section: libs
+Priority: optional
+Maintainer: Matt Wlazlo <maintainer@example.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.30),
+               libboost-all-dev (>= 1.83),
+               libssl-dev,
+               nlohmann-json3-dev,
+               zlib1g-dev,
+               libspdlog-dev,
+               catch2
+Standards-Version: 4.6.0
+Homepage: https://github.com/snarky-puppy/td365
+Vcs-Git: https://github.com/snarky-puppy/td365.git
+Vcs-Browser: https://github.com/snarky-puppy/td365
+
+Package: libtd365-1
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: TD365 Trading API Library (shared library)
+ A C++ library for interfacing with the TD365 trading platform API.
+ .
+ This library provides a modern C++ interface to access TD365 trading platform
+ features including authentication via OAuth, real-time WebSocket data
+ streaming, and market data access.
+ .
+ This package contains the shared library.
+
+Package: libtd365-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libtd365-1 (= ${binary:Version}),
+         ${misc:Depends},
+         libboost-all-dev (>= 1.83),
+         libssl-dev,
+         nlohmann-json3-dev,
+         zlib1g-dev,
+         libspdlog-dev
+Description: TD365 Trading API Library (development files)
+ A C++ library for interfacing with the TD365 trading platform API.
+ .
+ This library provides a modern C++ interface to access TD365 trading platform
+ features including authentication via OAuth, real-time WebSocket data
+ streaming, and market data access.
+ .
+ This package contains the development files (headers and static library).

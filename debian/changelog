@@ -1,0 +1,10 @@
+libtd365 (1.0.0-1) unstable; urgency=medium
+
+  * Initial release
+  * Modern C++ library for TD365 trading platform API
+  * OAuth authentication support
+  * Real-time WebSocket data streaming
+  * Market data access functionality
+  * Built with C++23 standard
+
+ -- Matt Wlazlo <maintainer@example.com>  Wed, 28 Aug 2024 12:00:00 +0000

@@ -30,10 +30,34 @@ This library provides a modern C++ interface to access TD365 trading platform fe
 
 ## Building
 
+### Standard Build
+
 ```bash
 mkdir build && cd build
 cmake ..
 make
+```
+
+### Debian Package
+
+To build a Debian package:
+
+```bash
+# Install build dependencies
+sudo apt update
+sudo apt install debhelper-compat cmake libboost-all-dev libssl-dev nlohmann-json3-dev zlib1g-dev libspdlog-dev catch2
+
+# Build the package
+dpkg-buildpackage -us -uc
+```
+
+This creates two packages:
+- `libtd365-1` - Runtime shared library
+- `libtd365-dev` - Development headers and static library
+
+Install with:
+```bash
+sudo dpkg -i ../libtd365-*.deb
 ```
 
 ## Usage Example
