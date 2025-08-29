@@ -5,8 +5,8 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "types.h"
-#include "ws_client.h"
+#include <td365/types.h>
+#include <td365/ws_client.h>
 
 #include <atomic>
 #include <boost/asio.hpp>

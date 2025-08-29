@@ -10,7 +10,7 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "td365.h"
+#include <td365/td365.h>
 
 #include <algorithm>
 #include <boost/core/verbose_terminate_handler.hpp>
@@ -61,6 +61,7 @@ struct candle_agg {
                 .high = price,
                 .low = price,
                 .close = price,
+                .volume = 0,
             };
 
             current_bucket = bucket;
@@ -126,16 +127,16 @@ struct strategy {
                         on_tick(std::move(t));
                     });
                 },
-            .acc_detail_cb =
-                [&](td365::account_details &&a) {
-                    boost::asio::post(ioc, [this, a = std::move(a)]() mutable {
-                        on_account_details(std::move(a));
-                    });
-                },
             .acc_summary_cb =
                 [&](td365::account_summary &&a) {
                     boost::asio::post(ioc, [this, a = std::move(a)]() mutable {
                         on_account_summary(std::move(a));
+                    });
+                },
+            .acc_detail_cb =
+                [&](td365::account_details &&a) {
+                    boost::asio::post(ioc, [this, a = std::move(a)]() mutable {
+                        on_account_details(std::move(a));
                     });
                 },
             .trade_response_cb =
@@ -174,12 +175,12 @@ struct strategy {
     void buy(const td365::tick &t) {
         client.trade({
             .dir = td365::trade_request::direction::buy,
-            .quote_id = market.quote_id,
             .market_id = market.market_id,
+            .quote_id = market.quote_id,
             .price = t.ask,
             .stake = 1,
-            .limit = t.ask + 10,
             .stop = t.ask - 10,
+            .limit = t.ask + 10,
             .key = t.hash,
         });
     }
@@ -187,12 +188,12 @@ struct strategy {
     void sell(const td365::tick &t) {
         client.trade({
             .dir = td365::trade_request::direction::sell,
-            .quote_id = market.quote_id,
             .market_id = market.market_id,
+            .quote_id = market.quote_id,
             .price = t.bid,
             .stake = 1,
-            .limit = t.bid - 10,
             .stop = t.bid + 10,
+            .limit = t.bid - 10,
             .key = t.hash,
         });
     }
@@ -239,7 +240,7 @@ struct strategy {
     }
 
     td365::td365 client;
-    signals signals;
+    struct signals signals;
     td365::market market;
 };
 

@@ -5,10 +5,10 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "authenticator.h"
+#include <td365/authenticator.h>
 
-#include "utils.h"
-#include "verify.h"
+#include <td365/utils.h>
+#include <td365/verify.h>
 
 #include <cassert>
 #include <fstream>

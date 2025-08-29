@@ -5,14 +5,14 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "rest_api.h"
+#include <td365/rest_api.h>
 
-#include "error.h"
-#include "http_client.h"
-#include "parsing.h"
-#include "types.h"
-#include "utils.h"
-#include "verify.h"
+#include <td365/error.h>
+#include <td365/http_client.h>
+#include <td365/parsing.h>
+#include <td365/types.h>
+#include <td365/utils.h>
+#include <td365/verify.h>
 
 #include <boost/beast.hpp>
 #include <nlohmann/json.hpp>

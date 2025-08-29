@@ -5,10 +5,10 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "types.h"
+#include <td365/types.h>
 
 #include <nlohmann/json.hpp>
-#include <parsing.h>
+#include <td365/parsing.h>
 
 namespace td365 {
 std::ostream &operator<<(std::ostream &os, const grouping &g) {

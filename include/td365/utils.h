@@ -7,9 +7,9 @@
 
 #pragma once
 
-#include "http_client.h"
+#include <td365/http_client.h>
 #include "nlohmann/json_fwd.hpp"
-#include "verify.h"
+#include <td365/verify.h>
 
 #include <boost/asio/ssl/context.hpp>
 #include <boost/url/url.hpp>

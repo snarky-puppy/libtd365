@@ -5,12 +5,12 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "ws_client.h"
+#include <td365/ws_client.h>
 
-#include "parsing.h"
-#include "td365.h"
-#include "utils.h"
-#include "ws.h"
+#include <td365/parsing.h>
+#include <td365/td365.h>
+#include <td365/utils.h>
+#include <td365/ws.h>
 
 #include <algorithm>
 #include <boost/asio/detached.hpp>

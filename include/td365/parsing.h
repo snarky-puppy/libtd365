@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "td365.h"
+#include <td365/td365.h>
 
 #include <optional>
 #include <string_view>

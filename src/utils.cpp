@@ -5,10 +5,10 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include "utils.h"
+#include <td365/utils.h>
 
 #include "base64.hpp"
-#include "http_client.h"
+#include <td365/http_client.h>
 #include "nlohmann/json.hpp"
 
 #include <boost/asio/ssl.hpp>

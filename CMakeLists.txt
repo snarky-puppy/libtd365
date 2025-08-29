@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
 
-set(CMAKE_TOOLCHAIN_FILE
-        "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        CACHE STRING "Vcpkg toolchain file")
+#set(CMAKE_TOOLCHAIN_FILE
+#        "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+#        CACHE STRING "Vcpkg toolchain file")
 
 project(td365)
 
@@ -39,14 +39,14 @@ find_package(ZLIB REQUIRED)
 
 find_package(spdlog CONFIG REQUIRED)
 
-target_include_directories(td365 PUBLIC src ${Boost_INCLUDE_DIRS})
+target_include_directories(td365 PUBLIC include ${Boost_INCLUDE_DIRS})
 target_link_libraries(td365 PUBLIC ${Boost_LIBRARIES} ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json spdlog::spdlog_header_only)
 
-target_include_directories(td365_static PUBLIC src ${Boost_INCLUDE_DIRS})
+target_include_directories(td365_static PUBLIC include ${Boost_INCLUDE_DIRS})
 target_link_libraries(td365_static PUBLIC ${Boost_LIBRARIES} ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json spdlog::spdlog_header_only)
 
 add_executable(trade_test examples/trade_test.cpp)
-target_include_directories(trade_test PUBLIC td365)
+target_include_directories(trade_test PUBLIC include)
 target_link_libraries(trade_test PUBLIC td365)
 
 target_compile_options(trade_test PUBLIC -fsanitize=address -g -O1)
@@ -83,5 +83,5 @@ install(TARGETS td365 LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(TARGETS td365_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # Install headers
-file(GLOB HEADERS src/*.h src/*.hpp)
+file(GLOB HEADERS include/td365/*.h)
 install(FILES ${HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/td365)

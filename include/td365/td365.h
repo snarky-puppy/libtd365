@@ -7,10 +7,10 @@
 
 #pragma once
 
-#include "authenticator.h"
-#include "rest_api.h"
-#include "types.h"
-#include "ws_client.h"
+#include <td365/authenticator.h>
+#include <td365/rest_api.h>
+#include <td365/types.h>
+#include <td365/ws_client.h>
 
 #include <functional>
 #include <memory>

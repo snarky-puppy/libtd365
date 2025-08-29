@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include "types.h"
-#include "ws.h"
+#include <td365/types.h>
+#include <td365/ws.h>
 
 #include <atomic>
 #include <boost/asio.hpp>
