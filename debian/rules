@@ -33,5 +33,6 @@ override_dh_install:
 	dh_install
 	# Install headers
 	mkdir -p debian/libtd365-dev/usr/include/td365
-	cp src/*.h debian/libtd365-dev/usr/include/td365/
+	cp -r include/td365 debian/libtd365-dev/usr/include/td365
 	cp src/*.hpp debian/libtd365-dev/usr/include/td365/
+
