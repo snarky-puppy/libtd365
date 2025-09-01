@@ -16,8 +16,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wconversion -fno-omit-frame-pointer)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
-add_library(td365 SHARED ${SOURCES})
-add_library(td365_static STATIC ${SOURCES})
+
+# Create an OBJECT library to avoid rebuilding sources for both static and shared
+add_library(td365_obj OBJECT ${SOURCES})
+
+# Set position independent code for the OBJECT library (required for shared libraries)
+set_target_properties(td365_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Create shared and static libraries from the object library
+add_library(td365 SHARED $<TARGET_OBJECTS:td365_obj>)
+add_library(td365_static STATIC $<TARGET_OBJECTS:td365_obj>)
 
 # Set version information
 set_target_properties(td365 PROPERTIES 
@@ -39,6 +47,11 @@ find_package(ZLIB REQUIRED)
 
 find_package(spdlog CONFIG REQUIRED)
 
+# Set properties and dependencies on the OBJECT library
+target_include_directories(td365_obj PUBLIC include ${Boost_INCLUDE_DIRS})
+target_link_libraries(td365_obj PUBLIC ${Boost_LIBRARIES} ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json spdlog::spdlog_header_only)
+
+# The shared and static libraries inherit from the OBJECT library
 target_include_directories(td365 PUBLIC include ${Boost_INCLUDE_DIRS})
 target_link_libraries(td365 PUBLIC ${Boost_LIBRARIES} ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json spdlog::spdlog_header_only)
 
