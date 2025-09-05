@@ -6,8 +6,9 @@
  */
 
 #include <td365/parsing.h>
-
 #include <td365/types.h>
+
+#include <boost/charconv.hpp>
 
 #include <charconv>
 #include <iomanip>
@@ -133,7 +134,7 @@ namespace td365 {
     T parse(std::string_view sv) {
         T value{};
         auto [ptr, ec] =
-                std::from_chars(sv.data(), sv.data() + sv.size(), value);
+                boost::charconv::from_chars(sv.data(), sv.data() + sv.size(), value);
         verify(ec == std::errc(), "bad parse: {}", sv);
         return value;
     }

@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-#set(CMAKE_TOOLCHAIN_FILE
-#        "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-#        CACHE STRING "Vcpkg toolchain file")
+# to use vcpkg, export CMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
 
 project(td365)
 
@@ -40,7 +38,7 @@ set(Boost_USE_STATIC_LIBS OFF) # use shared libs for debian package
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF) # do not look for boost libraries linked against static C++ std lib
 
-find_package(Boost REQUIRED COMPONENTS system thread url iostreams)
+find_package(Boost REQUIRED COMPONENTS thread url iostreams charconv)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
