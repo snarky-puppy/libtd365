@@ -8,7 +8,7 @@
 #include <td365/parsing.h>
 #include <td365/types.h>
 
-#include <boost/convert/charconv.hpp>
+#include <boost/charconv.hpp>
 
 #include <charconv>
 #include <iomanip>

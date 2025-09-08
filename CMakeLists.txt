@@ -26,19 +26,20 @@ add_library(td365 SHARED $<TARGET_OBJECTS:td365_obj>)
 add_library(td365_static STATIC $<TARGET_OBJECTS:td365_obj>)
 
 # Set version information
-set_target_properties(td365 PROPERTIES 
-    VERSION 1.0.0 
-    SOVERSION 1
+set_target_properties(td365 PROPERTIES
+        VERSION 1.0.0
+        SOVERSION 1
 )
 set_target_properties(td365_static PROPERTIES OUTPUT_NAME td365)
 
 set(Boost_VERBOSE ON)
+set(Boost_NO_BOOST_CMAKE ON)
 set(Boost_DEBUG ON)
 set(Boost_USE_STATIC_LIBS OFF) # use shared libs for debian package
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF) # do not look for boost libraries linked against static C++ std lib
 
-find_package(Boost REQUIRED COMPONENTS thread url iostreams)
+find_package(Boost 1.89.0 REQUIRED COMPONENTS thread iostreams url charconv)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
