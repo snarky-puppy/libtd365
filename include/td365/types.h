@@ -93,6 +93,8 @@ struct tick {
     grouping group;
     std::chrono::nanoseconds latency{}; // difference between received timestamp
     // and timestamp sent by server
+
+    static tick parse(const std::string_view line);
 };
 
 struct trade_request {

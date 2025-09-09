@@ -91,3 +91,145 @@ TEST_CASE("Benchmark parse_tick2()", "[benchmark]") {
         return result;
     };
 }
+
+TEST_CASE("tick::parse() can parse CSV format", "[tick][parsing]") {
+    SECTION("Parse real production data") {
+        std::string_view csv_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
+        
+        auto tick = td365::tick::parse(csv_line);
+        
+        REQUIRE(tick.quote_id == 5906);
+        REQUIRE(tick.bid == Catch::Approx(1.344040));
+        REQUIRE(tick.ask == Catch::Approx(1.344160));
+        REQUIRE(tick.daily_change == Catch::Approx(-0.000360));
+        REQUIRE(tick.dir == td365::direction::unchanged);
+        REQUIRE(tick.tradable == true);
+        REQUIRE(tick.high == Catch::Approx(1.344960));
+        REQUIRE(tick.low == Catch::Approx(1.343730));
+        REQUIRE(tick.hash == "99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=");
+        REQUIRE(tick.call_only == false);
+        REQUIRE(tick.mid_price == Catch::Approx(1.344090));
+        REQUIRE(tick.field13 == 1044784);
+        REQUIRE(tick.group == td365::grouping::sampled);
+        REQUIRE(tick.latency.count() == 62707541);
+    }
+    
+    SECTION("Parse different direction values") {
+        std::string_view up_line = "5893,1.166080,1.166140,-0.000150,up,true,1.166560,1.165640,ZXmc3iO03dMS1oeP0RKwHP4/+6w/1SgtlbotXNOsKuc=,false,1.166100,2025-09-03T23:59:58.206Z,548869,Sampled,223387910";
+        std::string_view down_line = "878770,3560.350000,3560.850000,1.430000,down,true,3565.040000,3554.120000,XJTniqjuBhcOAoSdrhDhbtKtvmbwViFgk71103XvoPw=,false,3560.600000,2025-09-03T23:59:58.210Z,604771,Sampled,219411757";
+        std::string_view unchanged_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
+        
+        REQUIRE(td365::tick::parse(up_line).dir == td365::direction::up);
+        REQUIRE(td365::tick::parse(down_line).dir == td365::direction::down);
+        REQUIRE(td365::tick::parse(unchanged_line).dir == td365::direction::unchanged);
+    }
+    
+    SECTION("Parse different grouping values") {
+        std::string_view sampled_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
+        std::string_view grouped_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Grouped,62707541";
+        std::string_view delayed_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Delayed,62707541";
+        std::string_view candle_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Candle1Minute,62707541";
+        
+        REQUIRE(td365::tick::parse(sampled_line).group == td365::grouping::sampled);
+        REQUIRE(td365::tick::parse(grouped_line).group == td365::grouping::grouped);
+        REQUIRE(td365::tick::parse(delayed_line).group == td365::grouping::delayed);
+        REQUIRE(td365::tick::parse(candle_line).group == td365::grouping::candle_1m);
+    }
+    
+    SECTION("Parse boolean values") {
+        std::string_view all_true_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,true,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
+        std::string_view all_false_line = "5906,1.344040,1.344160,-0.000360,unchanged,false,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
+        
+        auto true_tick = td365::tick::parse(all_true_line);
+        auto false_tick = td365::tick::parse(all_false_line);
+        
+        REQUIRE(true_tick.tradable == true);
+        REQUIRE(true_tick.call_only == true);
+        REQUIRE(false_tick.tradable == false);
+        REQUIRE(false_tick.call_only == false);
+    }
+    
+    SECTION("Throw exception on invalid field count") {
+        std::string_view too_few_fields = "5906,1.344040,1.344160";
+        
+        REQUIRE_THROWS_AS(td365::tick::parse(too_few_fields), std::invalid_argument);
+    }
+    
+    SECTION("Throw exception on invalid timestamp") {
+        std::string_view invalid_timestamp = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,invalid-timestamp,1044784,Sampled,62707541";
+        
+        REQUIRE_THROWS_AS(td365::tick::parse(invalid_timestamp), std::invalid_argument);
+    }
+}
+
+TEST_CASE("operator<< formats tick in CSV format", "[tick][output]") {
+    SECTION("Format basic tick data") {
+        td365::tick tick{};
+        tick.quote_id = 12345;
+        tick.bid = 100.50;
+        tick.ask = 101.50;
+        tick.daily_change = -2.50;
+        tick.dir = td365::direction::up;
+        tick.tradable = true;
+        tick.high = 105.00;
+        tick.low = 95.00;
+        tick.hash = "dGVzdF9oYXNo";
+        tick.call_only = false;
+        tick.mid_price = 101.00;
+        tick.timestamp = std::chrono::system_clock::from_time_t(1736941845) + std::chrono::milliseconds(123);
+        tick.field13 = 789;
+        tick.group = td365::grouping::grouped;
+        tick.latency = std::chrono::nanoseconds(1500000);
+        
+        std::ostringstream oss;
+        oss << tick;
+        std::string output = oss.str();
+        
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("12345"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("100.500000"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("101.500000"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("-2.500000"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("up"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("true"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("105.000000"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("95.000000"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("dGVzdF9oYXNo"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("false"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("101.000000"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("789"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("Grouped"));
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring("1500000"));
+    }
+    
+    SECTION("Format different direction values") {
+        td365::tick tick{};
+        tick.quote_id = 123;
+        tick.timestamp = std::chrono::system_clock::from_time_t(1736941845);
+        
+        tick.dir = td365::direction::up;
+        std::ostringstream oss1;
+        oss1 << tick;
+        REQUIRE_THAT(oss1.str(), Catch::Matchers::ContainsSubstring("up"));
+        
+        tick.dir = td365::direction::down;
+        std::ostringstream oss2;
+        oss2 << tick;
+        REQUIRE_THAT(oss2.str(), Catch::Matchers::ContainsSubstring("down"));
+        
+        tick.dir = td365::direction::unchanged;
+        std::ostringstream oss3;
+        oss3 << tick;
+        REQUIRE_THAT(oss3.str(), Catch::Matchers::ContainsSubstring("unchanged"));
+    }
+    
+    SECTION("Format timestamp as ISO 8601") {
+        td365::tick tick{};
+        tick.timestamp = std::chrono::system_clock::from_time_t(1736941845) + std::chrono::milliseconds(456);
+        
+        std::ostringstream oss;
+        oss << tick;
+        std::string output = oss.str();
+        
+        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring(".456Z"));
+    }
+}
