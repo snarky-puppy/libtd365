@@ -111,6 +111,8 @@ namespace td365 {
             auto ms = std::chrono::milliseconds(std::stoi(std::string(ms_part)));
             timestamp = std::chrono::system_clock::from_time_t(time) + ms;
         } else {
+            spdlog::error("Invalid timestamp format: {}", timestamp_str);
+            spdlog::error("on line: {}", line);
             throw std::invalid_argument("Invalid timestamp format: " + std::string(timestamp_str));
         }
 
