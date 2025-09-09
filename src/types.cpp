@@ -56,7 +56,7 @@ namespace td365 {
         return os;
     }
 
-    tick tick::parse(const std::string_view line) {
+    void tick::parse(const std::string_view line) {
         constexpr size_t EXPECTED_FIELDS = 15;
         std::array<std::string_view, EXPECTED_FIELDS> fields;
         size_t idx = 0;
@@ -82,18 +82,16 @@ namespace td365 {
         }
 
         // Parse direction from string
-        direction dir_value;
         if (fields[4][0] == 'u' && fields[4][1] == 'p') {
-            dir_value = direction::up;
+            dir = direction::up;
         } else if (fields[4][0] == 'd') {
-            dir_value = direction::down;
+            dir = direction::down;
         } else {
-            dir_value = direction::unchanged;
+            dir = direction::unchanged;
         }
 
         // Parse timestamp (ISO 8601 format: YYYY-MM-DDTHH:MM:SS.sssZ)
         auto timestamp_str = fields[11];
-        std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> timestamp_value;
 
         if (timestamp_str.size() >= 23 && timestamp_str.back() == 'Z') {
             // Parse YYYY-MM-DDTHH:MM:SS.sssZ
@@ -111,21 +109,13 @@ namespace td365 {
 
             std::time_t time = std::mktime(&tm);
             auto ms = std::chrono::milliseconds(std::stoi(std::string(ms_part)));
-            timestamp_value = std::chrono::system_clock::from_time_t(time) + ms;
+            timestamp = std::chrono::system_clock::from_time_t(time) + ms;
         } else {
             throw std::invalid_argument("Invalid timestamp format: " + std::string(timestamp_str));
         }
 
         // Parse grouping enum
-        grouping group_value = grouping::grouped;
-        auto group_str = fields[13];
-        if (group_str == "Sampled") {
-            group_value = grouping::sampled;
-        } else if (group_str == "Delayed") {
-            group_value = grouping::delayed;
-        } else if (group_str == "Candle1Minute") {
-            group_value = grouping::candle_1m;
-        }
+        group = string_to_price_type(fields[13]);
 
         // Helper lambda to parse double
         auto parse_double = [](std::string_view sv) -> double {
@@ -152,23 +142,24 @@ namespace td365 {
             return sv == "true";
         };
 
-        return tick{
-            .quote_id = parse_int(fields[0]),
-            .bid = parse_double(fields[1]),
-            .ask = parse_double(fields[2]),
-            .daily_change = parse_double(fields[3]),
-            .dir = dir_value,
-            .tradable = parse_bool(fields[5]),
-            .high = parse_double(fields[6]),
-            .low = parse_double(fields[7]),
-            .hash = std::string(fields[8]),
-            .call_only = parse_bool(fields[9]),
-            .mid_price = parse_double(fields[10]),
-            .timestamp = timestamp_value,
-            .field13 = parse_int(fields[12]),
-            .group = group_value,
-            .latency = std::chrono::nanoseconds(std::stoll(std::string(fields[14])))
-        };
+        quote_id = parse_int(fields[0]);
+        bid = parse_double(fields[1]);
+        ask = parse_double(fields[2]);
+        daily_change = parse_double(fields[3]);
+        tradable = parse_bool(fields[5]);
+        high = parse_double(fields[6]);
+        low = parse_double(fields[7]);
+        hash = std::string(fields[8]);
+        call_only = parse_bool(fields[9]);
+        mid_price = parse_double(fields[10]);
+        field13 = parse_int(fields[12]);
+        latency = std::chrono::nanoseconds(std::stoll(std::string(fields[14])));
+    }
+
+    tick tick::create(const std::string_view line) {
+        tick rv;
+        rv.parse(line);
+        return rv;
     }
 
     /*

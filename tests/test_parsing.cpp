@@ -96,7 +96,7 @@ TEST_CASE("tick::parse() can parse CSV format", "[tick][parsing]") {
     SECTION("Parse real production data") {
         std::string_view csv_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
         
-        auto tick = td365::tick::parse(csv_line);
+        auto tick = td365::tick::create(csv_line);
         
         REQUIRE(tick.quote_id == 5906);
         REQUIRE(tick.bid == Catch::Approx(1.344040));
@@ -119,9 +119,9 @@ TEST_CASE("tick::parse() can parse CSV format", "[tick][parsing]") {
         std::string_view down_line = "878770,3560.350000,3560.850000,1.430000,down,true,3565.040000,3554.120000,XJTniqjuBhcOAoSdrhDhbtKtvmbwViFgk71103XvoPw=,false,3560.600000,2025-09-03T23:59:58.210Z,604771,Sampled,219411757";
         std::string_view unchanged_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
         
-        REQUIRE(td365::tick::parse(up_line).dir == td365::direction::up);
-        REQUIRE(td365::tick::parse(down_line).dir == td365::direction::down);
-        REQUIRE(td365::tick::parse(unchanged_line).dir == td365::direction::unchanged);
+        REQUIRE(td365::tick::create(up_line).dir == td365::direction::up);
+        REQUIRE(td365::tick::create(down_line).dir == td365::direction::down);
+        REQUIRE(td365::tick::create(unchanged_line).dir == td365::direction::unchanged);
     }
     
     SECTION("Parse different grouping values") {
@@ -130,18 +130,18 @@ TEST_CASE("tick::parse() can parse CSV format", "[tick][parsing]") {
         std::string_view delayed_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Delayed,62707541";
         std::string_view candle_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Candle1Minute,62707541";
         
-        REQUIRE(td365::tick::parse(sampled_line).group == td365::grouping::sampled);
-        REQUIRE(td365::tick::parse(grouped_line).group == td365::grouping::grouped);
-        REQUIRE(td365::tick::parse(delayed_line).group == td365::grouping::delayed);
-        REQUIRE(td365::tick::parse(candle_line).group == td365::grouping::candle_1m);
+        REQUIRE(td365::tick::create(sampled_line).group == td365::grouping::sampled);
+        REQUIRE(td365::tick::create(grouped_line).group == td365::grouping::grouped);
+        REQUIRE(td365::tick::create(delayed_line).group == td365::grouping::delayed);
+        REQUIRE(td365::tick::create(candle_line).group == td365::grouping::candle_1m);
     }
     
     SECTION("Parse boolean values") {
         std::string_view all_true_line = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,true,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
         std::string_view all_false_line = "5906,1.344040,1.344160,-0.000360,unchanged,false,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,2025-09-03T23:59:58.069Z,1044784,Sampled,62707541";
         
-        auto true_tick = td365::tick::parse(all_true_line);
-        auto false_tick = td365::tick::parse(all_false_line);
+        auto true_tick = td365::tick::create(all_true_line);
+        auto false_tick = td365::tick::create(all_false_line);
         
         REQUIRE(true_tick.tradable == true);
         REQUIRE(true_tick.call_only == true);
@@ -152,13 +152,13 @@ TEST_CASE("tick::parse() can parse CSV format", "[tick][parsing]") {
     SECTION("Throw exception on invalid field count") {
         std::string_view too_few_fields = "5906,1.344040,1.344160";
         
-        REQUIRE_THROWS_AS(td365::tick::parse(too_few_fields), std::invalid_argument);
+        REQUIRE_THROWS_AS(td365::tick::create(too_few_fields), std::invalid_argument);
     }
     
     SECTION("Throw exception on invalid timestamp") {
         std::string_view invalid_timestamp = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,invalid-timestamp,1044784,Sampled,62707541";
         
-        REQUIRE_THROWS_AS(td365::tick::parse(invalid_timestamp), std::invalid_argument);
+        REQUIRE_THROWS_AS(td365::tick::create(invalid_timestamp), std::invalid_argument);
     }
 }
 
