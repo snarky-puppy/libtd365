@@ -24,6 +24,7 @@ std::ostream &operator<<(std::ostream &os, const direction &d) {
 }
 
 std::ostream &operator<<(std::ostream &os, const tick &t) {
+    /*
     auto tp = t.timestamp;
     auto tp_conv =
         std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
@@ -35,6 +36,7 @@ std::ostream &operator<<(std::ostream &os, const tick &t) {
     iso_timestamp << std::put_time(std::localtime(&time), "%Y-%m-%dT%H:%M:%S")
                   << '.' << std::setw(3) << std::setfill('0') << ms.count()
                   << "Z";
+                  */
 
     auto latency = t.latency.count();
 
@@ -46,7 +48,7 @@ std::ostream &operator<<(std::ostream &os, const tick &t) {
        << std::fixed << std::setprecision(6) << t.low << "," << t.hash << ","
        << (t.call_only ? "true" : "false") << "," << std::fixed
        << std::setprecision(6) << t.mid_price << ","
-       << "" << iso_timestamp.str() << "," << t.field13 << ","
+       << "" << t.timestamp << "," << t.field13 << ","
        << "" << to_cstring(t.group) << "," << latency;
     return os;
 }
@@ -77,7 +79,8 @@ void tick::parse(const std::string_view line) {
     }
 
     // Parse direction from string
-    if (fields[4][0] == 'u' && fields[4][1] == 'p') {
+    if (fields[4][1] == 'p') {
+        // 'up'
         dir = direction::up;
     } else if (fields[4][0] == 'd') {
         dir = direction::down;
@@ -86,32 +89,32 @@ void tick::parse(const std::string_view line) {
     }
 
     // Parse timestamp (ISO 8601 format: YYYY-MM-DDTHH:MM:SS.sssZ)
-    auto timestamp_str = fields[11];
+    /*
+            if (timestamp_str.size() >= 23 && timestamp_str.back() == 'Z') {
+                // Parse YYYY-MM-DDTHH:MM:SS.sssZ
+                std::tm tm{};
+                auto date_part = timestamp_str.substr(0, 19);
+                auto ms_part = timestamp_str.substr(20, 3);
 
-    if (timestamp_str.size() >= 23 && timestamp_str.back() == 'Z') {
-        // Parse YYYY-MM-DDTHH:MM:SS.sssZ
-        std::tm tm{};
-        auto date_part = timestamp_str.substr(0, 19);
-        auto ms_part = timestamp_str.substr(20, 3);
+                auto date_part_s = std::string(date_part);
+                std::istringstream ss(date_part_s);
+                ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
 
-        auto date_part_s = std::string(date_part);
-        std::istringstream ss(date_part_s);
-        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+                if (ss.fail()) {
+                    throw std::invalid_argument("Invalid timestamp format: " +
+                                                std::string(timestamp_str));
+                }
 
-        if (ss.fail()) {
-            throw std::invalid_argument("Invalid timestamp format: " +
-                                        std::string(timestamp_str));
-        }
-
-        std::time_t time = std::mktime(&tm);
-        auto ms = std::chrono::milliseconds(std::stoi(std::string(ms_part)));
-        timestamp = std::chrono::system_clock::from_time_t(time) + ms;
-    } else {
-        spdlog::error("Invalid timestamp format: {}", timestamp_str);
-        spdlog::error("on line: {}", line);
-        throw std::invalid_argument("Invalid timestamp format: " +
-                                    std::string(timestamp_str));
-    }
+                std::time_t time = std::mktime(&tm);
+                auto ms =
+       std::chrono::milliseconds(std::stoi(std::string(ms_part))); timestamp =
+       std::chrono::system_clock::from_time_t(time) + ms; } else {
+                spdlog::error("Invalid timestamp format: {}", timestamp_str);
+                spdlog::error("on line: {}", line);
+                throw std::invalid_argument("Invalid timestamp format: " +
+                                            std::string(timestamp_str));
+            }
+    */
 
     // Parse grouping enum
     group = string_to_price_type(fields[13]);
@@ -152,7 +155,8 @@ void tick::parse(const std::string_view line) {
     call_only = parse_bool(fields[9]);
     mid_price = parse_double(fields[10]);
     field13 = parse_int(fields[12]);
-    latency = std::chrono::nanoseconds(std::stoll(std::string(fields[14])));
+    latency = string_to_duration(fields[14]);
+    timestamp = string_to_timepoint(fields[11]);
 }
 
 tick tick::create(const std::string_view line) {

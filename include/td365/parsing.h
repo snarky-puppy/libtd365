@@ -29,6 +29,11 @@ std::string_view to_string(direction dir);
 
 const std::string &to_cstring(direction dir);
 
+std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>
+string_to_timepoint(std::string_view s);
+
+std::chrono::nanoseconds string_to_duration(std::string_view s);
+
 // Convert string to price_type
 grouping string_to_price_type(std::string_view key);
 

@@ -81,6 +81,5 @@ class ws_client {
     boost::urls::url stored_url_;
     std::chrono::milliseconds reconnect_delay_ =
         std::chrono::milliseconds(1000);
-    int max_reconnect_attempts_ = 5;
 };
 } // namespace td365
