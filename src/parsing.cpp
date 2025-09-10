@@ -214,7 +214,8 @@ string_to_timepoint(std::string_view s) {
     long long ns{};
     auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), ns);
 
-    verify(ec != std::errc(), "invalid timestamp: {}", s);
+    verify(ec == std::errc(), "invalid timestamp: {}: {}", s,
+           std::make_error_code(ec).message());
 
     return std::chrono::time_point<std::chrono::system_clock,
                                    std::chrono::nanoseconds>(
@@ -224,7 +225,8 @@ string_to_timepoint(std::string_view s) {
 std::chrono::nanoseconds string_to_duration(std::string_view s) {
     long long ns{};
     auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), ns);
-    verify(ec != std::errc(), "invalid duration: {}", s);
+    verify(ec == std::errc(), "invalid duration: {}: {}", s,
+           std::make_error_code(ec).message());
     return std::chrono::nanoseconds{ns};
 }
 } // namespace td365
