@@ -1,11 +1,10 @@
 // tests/td_resolve_host_port_tests.cpp
 
 #define CATCH_CONFIG_MAIN
-#include <td365/parsing.h>
-#include <td365/types.h>
-
 #include <catch2/catch_all.hpp>
 #include <string>
+#include <td365/parsing.h>
+#include <td365/types.h>
 #include <vector>
 
 // clang-format off

@@ -7,14 +7,13 @@
 
 #pragma once
 
+#include <functional>
+#include <memory>
+#include <string>
 #include <td365/authenticator.h>
 #include <td365/rest_api.h>
 #include <td365/types.h>
 #include <td365/ws_client.h>
-
-#include <functional>
-#include <memory>
-#include <string>
 #include <vector>
 
 namespace td365 {

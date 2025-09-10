@@ -5,15 +5,13 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <td365/authenticator.h>
-
-#include <td365/utils.h>
-#include <td365/verify.h>
-
 #include <cassert>
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <td365/authenticator.h>
+#include <td365/utils.h>
+#include <td365/verify.h>
 
 namespace td365 {
 

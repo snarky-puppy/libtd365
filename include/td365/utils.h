@@ -7,24 +7,24 @@
 
 #pragma once
 
-#include <td365/http_client.h>
 #include "nlohmann/json_fwd.hpp"
-#include <td365/verify.h>
 
 #include <boost/asio/ssl/context.hpp>
 #include <boost/url/url.hpp>
+#include <td365/http_client.h>
+#include <td365/verify.h>
 
 namespace td365 {
-    nlohmann::json extract_jwt_payload(const nlohmann::json &jwt);
+nlohmann::json extract_jwt_payload(const nlohmann::json &jwt);
 
-    boost::asio::ssl::context &ssl_ctx();
+boost::asio::ssl::context &ssl_ctx();
 
-    std::string now_utc();
+std::string now_utc();
 
-    boost::urls::url check_proxy_url();
+boost::urls::url check_proxy_url();
 
-    std::string get_http_body(http_response const &res);
+std::string get_http_body(http_response const &res);
 
-    boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
-    td_resolve(std::string_view host, std::string_view port);
+boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
+td_resolve(std::string_view host, std::string_view port);
 } // namespace td365

@@ -5,13 +5,6 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <td365/ws_client.h>
-
-#include <td365/parsing.h>
-#include <td365/td365.h>
-#include <td365/utils.h>
-#include <td365/ws.h>
-
 #include <algorithm>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/ssl.hpp>
@@ -23,9 +16,13 @@
 #include <print>
 #include <ranges>
 #include <spdlog/spdlog.h>
+#include <td365/parsing.h>
+#include <td365/td365.h>
+#include <td365/utils.h>
+#include <td365/ws.h>
+#include <td365/ws_client.h>
 
 namespace td365 {
-
 namespace net = boost::asio;
 using net::use_awaitable;
 namespace ssl = boost::asio::ssl;
@@ -244,7 +241,7 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
             it != data.end() && it->is_array() && !it->empty()) {
             auto prices = it->get<std::vector<std::string>>();
             for (const auto &price : prices) {
-                callbacks_.tick_cb(parse_tick2(price, key.second));
+                callbacks_.tick_cb(parse_td_tick(price, key.second));
             }
         }
     }
@@ -256,7 +253,7 @@ void ws_client::process_subscribe_response(const nlohmann::json &msg) {
     auto prices = d["Current"].get<std::vector<std::string>>();
     auto g = string_to_price_type(d["PriceGrouping"].get<std::string>());
     for (const auto &p : prices) {
-        callbacks_.tick_cb(parse_tick(p, g));
+        callbacks_.tick_cb(parse_td_tick(p, g));
     }
 }
 
@@ -287,5 +284,4 @@ boost::asio::awaitable<void> ws_client::run(boost::urls::url_view url,
         co_await message_loop(login_id, token, shutdown);
     }
 }
-
 } // namespace td365

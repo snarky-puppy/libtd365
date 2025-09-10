@@ -7,9 +7,6 @@
 
 #pragma once
 
-#include <td365/types.h>
-#include <td365/ws.h>
-
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/url/url.hpp>
@@ -18,6 +15,8 @@
 #include <future>
 #include <nlohmann/json_fwd.hpp>
 #include <string>
+#include <td365/types.h>
+#include <td365/ws.h>
 #include <vector>
 
 namespace td365 {

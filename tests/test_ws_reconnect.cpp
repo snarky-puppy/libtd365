@@ -5,9 +5,6 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <td365/types.h>
-#include <td365/ws_client.h>
-
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -27,6 +24,8 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
+#include <td365/types.h>
+#include <td365/ws_client.h>
 #include <thread>
 
 namespace beast = boost::beast;

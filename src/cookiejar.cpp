@@ -5,20 +5,18 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <td365/cookiejar.h>
-
-#include <td365/utils.h>
-
 #include <boost/beast/http/field.hpp>
 #include <boost/beast/http/message.hpp>
 #include <cctype>
 #include <ctime>
 #include <fstream>
-#include <td365/http_client.h>
 #include <iomanip>
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <td365/cookiejar.h>
+#include <td365/http_client.h>
+#include <td365/utils.h>
 
 namespace {
 std::string trim(const std::string &str) {

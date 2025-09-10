@@ -5,17 +5,15 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <td365/td365.h>
-
-#include <td365/authenticator.h>
-#include <td365/ws_client.h>
-
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/detached.hpp>
 #include <iostream>
 #include <print>
 #include <spdlog/spdlog.h>
+#include <td365/authenticator.h>
+#include <td365/td365.h>
+#include <td365/ws_client.h>
 
 namespace td365 {
 namespace net = boost::asio; // from <boost/asio.hpp>

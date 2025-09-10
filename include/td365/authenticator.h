@@ -7,10 +7,9 @@
 
 #pragma once
 
-#include <td365/utils.h>
-
 #include <boost/asio/awaitable.hpp>
 #include <string>
+#include <td365/utils.h>
 
 namespace td365 {
 typedef enum { demo, prod, oneclick } account_type_t;

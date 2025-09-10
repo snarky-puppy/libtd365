@@ -7,11 +7,10 @@
 
 #pragma once
 
-#include <td365/http.h>
-
 #include <boost/url.hpp>
 #include <chrono>
 #include <string>
+#include <td365/http.h>
 #include <unordered_map>
 
 namespace td365 {

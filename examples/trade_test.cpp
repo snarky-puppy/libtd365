@@ -10,14 +10,13 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <td365/td365.h>
-
 #include <algorithm>
 #include <boost/core/verbose_terminate_handler.hpp>
 #include <boost/exception/diagnostic_information.hpp>
 #include <cassert>
 #include <iostream>
 #include <spdlog/spdlog.h>
+#include <td365/td365.h>
 #include <vector>
 
 struct candle_agg {

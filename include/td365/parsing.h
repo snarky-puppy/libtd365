@@ -7,10 +7,9 @@
 
 #pragma once
 
-#include <td365/td365.h>
-
 #include <optional>
 #include <string_view>
+#include <td365/td365.h>
 #include <unordered_map>
 
 namespace td365 {
@@ -36,9 +35,7 @@ grouping string_to_price_type(std::string_view key);
 // Parse tick from a comma-separated string
 // Format:
 // "quote_id,bid,ask,daily_change,direction,field6,high,low,hash,field10,mid_price,timestamp,field13"
-tick parse_tick(const std::string &price_string, grouping price_type);
-tick parse_tick2(std::string_view price_string, grouping price_type);
+tick parse_td_tick(std::string_view price_string, grouping price_type);
 
 candle parse_candle(std::string_view candle_string);
-
 } // namespace td365

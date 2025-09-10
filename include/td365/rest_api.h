@@ -7,12 +7,11 @@
 
 #pragma once
 
-#include <td365/types.h>
-
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/url/url.hpp>
 #include <string>
+#include <td365/types.h>
 #include <vector>
 
 namespace td365 {
