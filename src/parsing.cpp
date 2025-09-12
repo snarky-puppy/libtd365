@@ -200,7 +200,8 @@ candle parse_candle(std::string_view candle_string) {
            candle_string);
 
     return candle{
-        .timestamp = parse_iso8601_sv(fields[0]),
+        .timestamp = std::chrono::time_point_cast<std::chrono::seconds>(
+            string_to_timepoint(fields[0])),
         .open = parse_double(fields[1]),
         .high = parse_double(fields[2]),
         .low = parse_double(fields[3]),

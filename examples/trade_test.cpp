@@ -55,7 +55,8 @@ struct candle_agg {
 
             // 3. Start fresh candle
             current = td365::candle{
-                .timestamp = std::chrono::system_clock::now(),
+                .timestamp = std::chrono::time_point_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now()),
                 .open = price,
                 .high = price,
                 .low = price,

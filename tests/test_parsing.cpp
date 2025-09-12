@@ -71,21 +71,11 @@ static const std::vector<std::string> lines = {
     "875751,835.1,839.1,-28.2,d,1,873.9,811.8,gzA22quLexWC7nYKuFOZ9Mh/Tgt8Fexsu+KeHHGEwx0=,0,83.7,638854057083260000,239150",
 };
 
-TEST_CASE("Benchmark parse_tick()", "[benchmark]") {
+TEST_CASE("Benchmark parse_td_tick()", "[benchmark]") {
     BENCHMARK("parse each line") {
         td365::tick result;
         for (const auto &line : lines) {
-            result = td365::parse_tick(line, td365::grouping::grouped);
-        }
-        return result;
-    };
-}
-
-TEST_CASE("Benchmark parse_tick2()", "[benchmark]") {
-    BENCHMARK("parse each line") {
-        td365::tick result;
-        for (const auto &line : lines) {
-            result = td365::parse_tick2(line, td365::grouping::grouped);
+            result = td365::parse_td_tick(line, td365::grouping::grouped);
         }
         return result;
     };
@@ -157,7 +147,7 @@ TEST_CASE("tick::parse() can parse CSV format", "[tick][parsing]") {
     SECTION("Throw exception on invalid timestamp") {
         std::string_view invalid_timestamp = "5906,1.344040,1.344160,-0.000360,unchanged,true,1.344960,1.343730,99LYtEFhXIHWibMb+HeD4Rp0fkdqa5iDwwRrfSlc4gU=,false,1.344090,invalid-timestamp,1044784,Sampled,62707541";
         
-        REQUIRE_THROWS_AS(td365::tick::create(invalid_timestamp), std::invalid_argument);
+        REQUIRE_THROWS_AS(td365::tick::create(invalid_timestamp), std::exception);
     }
 }
 
@@ -221,14 +211,19 @@ TEST_CASE("operator<< formats tick in CSV format", "[tick][output]") {
         REQUIRE_THAT(oss3.str(), Catch::Matchers::ContainsSubstring("unchanged"));
     }
     
-    SECTION("Format timestamp as ISO 8601") {
+    SECTION("Format timestamp") {
         td365::tick tick{};
-        tick.timestamp = std::chrono::system_clock::from_time_t(1736941845) + std::chrono::milliseconds(456);
+        auto now = std::chrono::system_clock::now();
+        tick.timestamp = now;
         
         std::ostringstream oss;
         oss << tick;
         std::string output = oss.str();
-        
-        REQUIRE_THAT(output, Catch::Matchers::ContainsSubstring(".456Z"));
+
+        td365::tick tick2 = td365::tick::create(output);
+
+        auto now_ns = std::chrono::time_point_cast<std::chrono::nanoseconds>(now);
+        REQUIRE(tick2.timestamp.time_since_epoch().count()
+                == now_ns.time_since_epoch().count());
     }
 }

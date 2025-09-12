@@ -24,32 +24,23 @@ std::ostream &operator<<(std::ostream &os, const direction &d) {
 }
 
 std::ostream &operator<<(std::ostream &os, const tick &t) {
-    /*
-    auto tp = t.timestamp;
-    auto tp_conv =
-        std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
-    std::time_t time = std::chrono::system_clock::to_time_t(tp_conv);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                  tp.time_since_epoch()) %
-              1000;
-    std::ostringstream iso_timestamp;
-    iso_timestamp << std::put_time(std::localtime(&time), "%Y-%m-%dT%H:%M:%S")
-                  << '.' << std::setw(3) << std::setfill('0') << ms.count()
-                  << "Z";
-                  */
-
-    auto latency = t.latency.count();
-
-    os << t.quote_id << "," << std::fixed << std::setprecision(6) << t.bid
-       << "," << std::fixed << std::setprecision(6) << t.ask << ","
+    // clang-format off
+    os << t.quote_id << ","
+       << std::fixed << std::setprecision(6) << t.bid<< ","
+       << std::fixed << std::setprecision(6) << t.ask << ","
        << std::fixed << std::setprecision(6) << t.daily_change << ","
-       << "" << to_string(t.dir) << "," << (t.tradable ? "true" : "false")
-       << "," << std::fixed << std::setprecision(6) << t.high << ","
-       << std::fixed << std::setprecision(6) << t.low << "," << t.hash << ","
-       << (t.call_only ? "true" : "false") << "," << std::fixed
-       << std::setprecision(6) << t.mid_price << ","
-       << "" << t.timestamp << "," << t.field13 << ","
-       << "" << to_cstring(t.group) << "," << latency;
+       << "" << to_string(t.dir) << ","
+       << (t.tradable ? "true" : "false") << ","
+       << std::fixed << std::setprecision(6) << t.high << ","
+       << std::fixed << std::setprecision(6) << t.low << ","
+       << t.hash << ","
+       << (t.call_only ? "true" : "false") << ","
+       << std::fixed << std::setprecision(6) << t.mid_price << ","
+       << t.timestamp.time_since_epoch().count() << ","
+       << t.field13 << ","
+       << "" << to_cstring(t.group) << ","
+       << t.latency.count();
+    // clang-format on
     return os;
 }
 
@@ -87,34 +78,6 @@ void tick::parse(const std::string_view line) {
     } else {
         dir = direction::unchanged;
     }
-
-    // Parse timestamp (ISO 8601 format: YYYY-MM-DDTHH:MM:SS.sssZ)
-    /*
-            if (timestamp_str.size() >= 23 && timestamp_str.back() == 'Z') {
-                // Parse YYYY-MM-DDTHH:MM:SS.sssZ
-                std::tm tm{};
-                auto date_part = timestamp_str.substr(0, 19);
-                auto ms_part = timestamp_str.substr(20, 3);
-
-                auto date_part_s = std::string(date_part);
-                std::istringstream ss(date_part_s);
-                ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
-
-                if (ss.fail()) {
-                    throw std::invalid_argument("Invalid timestamp format: " +
-                                                std::string(timestamp_str));
-                }
-
-                std::time_t time = std::mktime(&tm);
-                auto ms =
-       std::chrono::milliseconds(std::stoi(std::string(ms_part))); timestamp =
-       std::chrono::system_clock::from_time_t(time) + ms; } else {
-                spdlog::error("Invalid timestamp format: {}", timestamp_str);
-                spdlog::error("on line: {}", line);
-                throw std::invalid_argument("Invalid timestamp format: " +
-                                            std::string(timestamp_str));
-            }
-    */
 
     // Parse grouping enum
     group = string_to_price_type(fields[13]);
@@ -164,20 +127,6 @@ tick tick::create(const std::string_view line) {
     rv.parse(line);
     return rv;
 }
-
-/*
-#ifdef __cpp_lib_print
-// Support for std::print and std::println in C++23
-template <typename CharT>
-struct std::formatter<tick, CharT> : std::formatter<std::string, CharT> {
-    auto format(const tick &t, std::format_context &ctx) const {
-        std::ostringstream oss;
-        oss << t;
-        return std::formatter<std::string, CharT>::format(oss.str(), ctx);
-    }
-};
-#endif
-*/
 
 // Serialization
 void to_json(nlohmann::json &j, const market_group &mg) {
