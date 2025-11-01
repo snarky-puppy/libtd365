@@ -51,14 +51,13 @@ void td365::connect(std::function<net::awaitable<web_detail>()> auth_fn) {
                 connect_p_.set_value();
                 co_await ws_client_.run(auth_detail.sock_host, login_id, token,
                                         shutdown_);
-                spdlog::info("message loop exiting");
             } catch (const std::exception &e) {
                 spdlog::error("ws_client: {}", e.what());
             } catch (...) {
                 std::println(std::cerr, "ws_client: unknown exception");
                 connect_p_.set_exception(std::current_exception());
-                co_return;
             }
+            spdlog::info("ws_client: message loop exiting");
 
             co_return;
         },
@@ -76,6 +75,7 @@ void td365::start_io_thread() {
         try {
             io_context_.run();
             std::cerr << "io_thread: joining" << std::endl;
+            callbacks_.exit_cb();
         } catch (const std::exception &e) {
             std::cerr << "io_thread: exception: " << e.what() << std::endl;
         } catch (...) {

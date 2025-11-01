@@ -376,11 +376,13 @@ struct user_callbacks {
     using acc_summary_type = std::function<void(account_summary &&)>;
     using acc_details_type = std::function<void(account_details &&)>;
     using trade_response_cb_type = std::function<void(trade_response &&)>;
+    using exit_cb_type = std::function<void()>;
 
     tick_cb_type tick_cb = [](tick &&) {};
     acc_summary_type acc_summary_cb = [](account_summary &&) {};
     acc_details_type acc_detail_cb = [](account_details &&) {};
     trade_response_cb_type trade_response_cb = [](trade_response &&) {};
+    exit_cb_type exit_cb = []() {};
 };
 
 std::ostream &operator<<(std::ostream &os, const td365::market_group &);
