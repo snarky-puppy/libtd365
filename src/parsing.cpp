@@ -5,7 +5,6 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <boost/charconv.hpp>
 #include <charconv>
 #include <iomanip>
 #include <iostream>
@@ -59,8 +58,7 @@ grouping string_to_price_type(std::string_view key) {
 
 template <typename T> T parse(std::string_view sv) {
     T value{};
-    auto [ptr, ec] =
-        boost::charconv::from_chars(sv.data(), sv.data() + sv.size(), value);
+    auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), value);
     verify(ec == std::errc(), "bad parse: {}", sv);
     return value;
 }
