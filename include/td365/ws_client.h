@@ -30,8 +30,8 @@ class ws_client {
     void connect(boost::urls::url_view url, const std::string &login_id,
                  const std::string &token);
 
-    event read_and_process_message(
-        std::optional<std::chrono::milliseconds> timeout);
+    event
+    read_and_process_message(std::optional<std::chrono::milliseconds> timeout);
 
     void send(const nlohmann::json &);
 
@@ -42,15 +42,13 @@ class ws_client {
   private:
     std::optional<event> process_subscribe_response(const nlohmann::json &msg);
 
-    std::optional<event>
-    process_reconnect_response(const nlohmann::json &msg);
+    std::optional<event> process_reconnect_response(const nlohmann::json &msg);
 
     std::optional<event> process_heartbeat(const nlohmann::json &msg);
 
-    std::optional<event>
-    process_connect_response(const nlohmann::json &msg,
-                             const std::string &login_id,
-                             const std::string &token);
+    std::optional<event> process_connect_response(const nlohmann::json &msg,
+                                                  const std::string &login_id,
+                                                  const std::string &token);
 
     std::optional<event>
     process_authentication_response(const nlohmann::json &msg);

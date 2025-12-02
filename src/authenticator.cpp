@@ -72,10 +72,8 @@ struct auth_token {
     std::chrono::system_clock::time_point expiry_time;
 };
 
-boost::asio::awaitable<auth_token> login(const std::string &username,
-                                         const std::string &password) {
-    http_client cli(co_await boost::asio::this_coro::executor,
-                    std::string{OAuthTokenHost});
+auth_token login(const std::string &username, const std::string &password) {
+    http_client cli(std::string{OAuthTokenHost});
     json body = {
         {"realm", "Username-Password-Authentication"},
         {"client_id", "eeXrVwSMXPZ4pJpwStuNyiUa7XxGZRX9"},
@@ -84,8 +82,8 @@ boost::asio::awaitable<auth_token> login(const std::string &username,
         {"username", username},
         {"password", password},
     };
-    const auto response = co_await cli.post("/oauth/token", body.dump(),
-                                            application_json_headers);
+    const auto response =
+        cli.post("/oauth/token", body.dump(), application_json_headers);
     verify(response.result() == boost::beast::http::status::ok,
            "login failed with result {}", static_cast<int>(response.result()));
 
@@ -98,27 +96,25 @@ boost::asio::awaitable<auth_token> login(const std::string &username,
             std::chrono::system_clock::now() +
             std::chrono::seconds(json_response["expires_in"].get<int>())};
 
-    co_return rv;
+    return rv;
 }
 
-boost::asio::awaitable<json> select_account(http_client &client,
-                                            const std::string &account_id) {
-    auto response = co_await client.get("/TD365/user/accounts/");
+json select_account(http_client &client, const std::string &account_id) {
+    auto response = client.get("/TD365/user/accounts/");
     verify(response.result() == boost::beast::http::status::ok,
            "select_account failed with result {}",
            static_cast<int>(response.result()));
     for (auto j = json::parse(get_http_body(response));
          const auto &account : j["results"]) {
         if (account["account"] == account_id) {
-            co_return account;
+            return account;
         }
     }
     throw std::runtime_error("account not found");
 }
 
-boost::asio::awaitable<url> fetch_platform_url(http_client &client,
-                                               std::string_view target) {
-    auto response = co_await client.get(target);
+url fetch_platform_url(http_client &client, std::string_view target) {
+    auto response = client.get(target);
     verify(response.result() == boost::beast::http::status::ok,
            "GET {} - bad status: {}", target,
            static_cast<int>(response.result()));
@@ -126,12 +122,12 @@ boost::asio::awaitable<url> fetch_platform_url(http_client &client,
     auto j = json::parse(get_http_body(response));
     auto loginagent_url = j["url"].get<std::string>();
 
-    co_return url{loginagent_url};
+    return url{loginagent_url};
 }
 
 namespace authenticator {
-boost::asio::awaitable<web_detail> authenticate() {
-    co_return web_detail{
+web_detail authenticate() {
+    return web_detail{
         // the "?aid=1026" is required for valid login
         .platform_url = boost::urls::parse_uri(DemoUrl).value(),
         .account_type = oneclick,
@@ -141,22 +137,20 @@ boost::asio::awaitable<web_detail> authenticate() {
     };
 }
 
-boost::asio::awaitable<web_detail> authenticate(std::string username,
-                                                std::string password,
-                                                std::string account_id) {
+web_detail authenticate(std::string username, std::string password,
+                        std::string account_id) {
     auto token = auth_token::load();
     if (std::chrono::system_clock::now() > token.expiry_time) {
-        token = co_await login(username, password);
+        token = login(username, password);
         token.save();
     }
 
-    http_client client(co_await boost::asio::this_coro::executor,
-                       std::string{PortalSiteHost});
+    http_client client(std::string{PortalSiteHost});
 
     client.default_headers().emplace(
         "Authorization", std::format("Bearer {}", token.access_token));
 
-    auto account = co_await select_account(client, account_id);
+    auto account = select_account(client, account_id);
 
     web_detail details;
     details.account_type = account["accountType"] == "DEMO" ? demo : prod;
@@ -165,7 +159,7 @@ boost::asio::awaitable<web_detail> authenticate(std::string username,
     auto launch_url = boost::urls::parse_uri(utmp);
     std::string_view target = launch_url.value().encoded_target();
 
-    details.platform_url = co_await fetch_platform_url(client, target);
+    details.platform_url = fetch_platform_url(client, target);
 
     details.site_host =
         url{details.account_type == demo ? DemoSiteHost : ProdSiteHost};
@@ -174,7 +168,7 @@ boost::asio::awaitable<web_detail> authenticate(std::string username,
     details.sock_host =
         url{details.account_type == demo ? DemoSockHost : ProdSockHost};
 
-    co_return details;
+    return details;
 }
 } // namespace authenticator
 } // namespace td365

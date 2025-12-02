@@ -98,27 +98,4 @@ std::string get_http_body(http_response const &res) {
     return body;
 }
 
-boost::asio::awaitable<boost::asio::ip::tcp::resolver::results_type>
-td_resolve(std::string_view host, std::string_view port) {
-    auto executor = co_await boost::asio::this_coro::executor;
-    auto resolver = boost::asio::ip::tcp::resolver{executor};
-
-    std::string h, p;
-
-    if (auto *env = std::getenv("PROXY")) {
-        try {
-            auto u = boost::urls::url{env};
-            h = std::string{u.host()};
-            p = u.has_port() ? u.port() : "8080";
-        } catch (const std::exception &e) {
-            throw fail("invalid PROXY environmental: {}", e.what());
-        }
-    } else {
-        h = host;
-        p = port;
-    }
-
-    auto ep = co_await resolver.async_resolve(h, p, boost::asio::use_awaitable);
-    co_return ep;
-}
 } // namespace td365

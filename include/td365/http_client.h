@@ -7,7 +7,6 @@
 #pragma once
 
 #include <boost/asio.hpp>
-#include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/http/message.hpp>
@@ -22,7 +21,7 @@ extern http_headers const no_headers;
 extern http_headers const application_json_headers;
 
 struct http_client {
-    http_client(boost::asio::any_io_executor, std::string host);
+    http_client(std::string host);
 
     virtual ~http_client() = default;
 
@@ -34,29 +33,28 @@ struct http_client {
 
     http_client &operator=(http_client &&) = delete;
 
-    boost::asio::awaitable<http_response>
-    get(std::string_view target,
-        std::optional<http_headers> headers = std::nullopt);
+    http_response get(std::string_view target,
+                      std::optional<http_headers> headers = std::nullopt);
 
-    boost::asio::awaitable<http_response>
-    post(std::string_view target,
-         std::optional<std::string> body = std::nullopt,
-         std::optional<http_headers> header = std::nullopt);
+    http_response post(std::string_view target,
+                       std::optional<std::string> body = std::nullopt,
+                       std::optional<http_headers> header = std::nullopt);
 
     http_headers &default_headers() { return default_headers_; };
 
     const cookiejar &jar() const { return jar_; }
 
   private:
-    boost::asio::awaitable<void> ensure_connected();
+    void ensure_connected();
 
     std::map<std::string, std::string> set_req_defaults(
         boost::beast::http::request<boost::beast::http::string_body> &req);
 
-    boost::asio::awaitable<http_response>
-    send(boost::beast::http::verb verb, std::string_view target,
-         std::optional<std::string> body, std::optional<http_headers> headers);
+    http_response send(boost::beast::http::verb verb, std::string_view target,
+                       std::optional<std::string> body,
+                       std::optional<http_headers> headers);
 
+    boost::asio::io_context io_context_;
     using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
     stream_t stream_;
 

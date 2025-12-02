@@ -39,7 +39,8 @@ void ws::connect(boost::urls::url url) {
 
     // Resolve synchronously
     tcp::resolver resolver(io_context_);
-    auto const endpoints = resolver.resolve(url.host(), (using_ssl_ ? "443" : "80"));
+    auto const endpoints =
+        resolver.resolve(url.host(), (using_ssl_ ? "443" : "80"));
 
     if (using_ssl_) {
         // Create SSL WebSocket

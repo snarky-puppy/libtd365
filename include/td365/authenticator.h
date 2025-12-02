@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <boost/asio/awaitable.hpp>
 #include <string>
 #include <td365/utils.h>
 
@@ -23,10 +22,9 @@ struct web_detail {
 };
 
 namespace authenticator {
-boost::asio::awaitable<web_detail> authenticate(std::string username,
-                                                std::string password,
-                                                std::string account_id);
+web_detail authenticate(std::string username, std::string password,
+                        std::string account_id);
 
-boost::asio::awaitable<web_detail> authenticate();
+web_detail authenticate();
 }; // namespace authenticator
 } // namespace td365

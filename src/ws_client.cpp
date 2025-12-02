@@ -81,7 +81,8 @@ void ws_client::connect(boost::urls::url_view url, const std::string &login_id,
     // Read connect response
     auto [ec, buf] = ws_->read_message();
     if (ec) {
-        throw std::runtime_error("Failed to read connect response: " + ec.message());
+        throw std::runtime_error("Failed to read connect response: " +
+                                 ec.message());
     }
 
     auto msg = nlohmann::json::parse(buf);
@@ -90,7 +91,8 @@ void ws_client::connect(boost::urls::url_view url, const std::string &login_id,
     // Read authentication response
     std::tie(ec, buf) = ws_->read_message();
     if (ec) {
-        throw std::runtime_error("Failed to read auth response: " + ec.message());
+        throw std::runtime_error("Failed to read auth response: " +
+                                 ec.message());
     }
 
     msg = nlohmann::json::parse(buf);
@@ -117,9 +119,7 @@ void ws_client::unsubscribe(int quote_id) {
     }
 }
 
-void ws_client::send(const nlohmann::json &body) {
-    ws_->send(body.dump());
-}
+void ws_client::send(const nlohmann::json &body) { ws_->send(body.dump()); }
 
 event ws_client::read_and_process_message(
     std::optional<std::chrono::milliseconds> timeout) {
@@ -173,8 +173,7 @@ event ws_client::read_and_process_message(
     }
 }
 
-std::optional<event>
-ws_client::process_heartbeat(const nlohmann::json &j) {
+std::optional<event> ws_client::process_heartbeat(const nlohmann::json &j) {
     send({
         {"SentByServer", j["d"]["SentByServer"]},
         {"MessagesReceived", j["d"]["MessagesReceived"]},
@@ -246,7 +245,8 @@ event ws_client::process_price_data(const nlohmann::json &msg) {
     throw std::runtime_error("process_price_data: no price data found");
 }
 
-std::optional<event> ws_client::process_subscribe_response(const nlohmann::json &msg) {
+std::optional<event>
+ws_client::process_subscribe_response(const nlohmann::json &msg) {
     auto d = msg["d"];
     verify(d["HasError"].get<bool>() == false, "HasError is true");
     auto prices = d["Current"].get<std::vector<std::string>>();

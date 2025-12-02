@@ -22,7 +22,6 @@ namespace net = boost::asio;      // from <boost/asio.hpp>
 namespace ssl = boost::asio::ssl; // from <boost/asio/ssl.hpp>
 using tcp = boost::asio::ip::tcp; // from <boost/asio/ip/tcp.hpp>
 using json = nlohmann::json;
-using net::awaitable;
 
 static constexpr auto MAX_DEPTH = 4;
 
@@ -66,15 +65,13 @@ template <typename T> T extract_d(const json &j) {
 template <typename T>
 auto make_post(http_client *client, std::string_view target,
                std::optional<std::string> body,
-               std::optional<http_headers> headers = std::nullopt)
-    -> net::awaitable<T> {
-    auto resp =
-        co_await client->post(target, std::move(body), std::move(headers));
+               std::optional<http_headers> headers = std::nullopt) -> T {
+    auto resp = client->post(target, std::move(body), std::move(headers));
     verify(resp.result() == boost::beast::http::status::ok,
            "unexpected response: from {}: {}", target,
            static_cast<unsigned>(resp.result()));
     auto j = json::parse(get_http_body(resp));
-    co_return extract_d<T>(j);
+    return extract_d<T>(j);
 }
 
 // void check_session_status(
@@ -91,12 +88,12 @@ rest_api::rest_api() = default;
 rest_api::~rest_api() = default;
 
 auto rest_api::open_client(std::string_view target, int depth)
-    -> net::awaitable<std::pair<std::string, std::string>> {
+    -> std::pair<std::string, std::string> {
     std::string t(target);
 
     while (depth <= MAX_DEPTH) {
         spdlog::info("Following link: {}", t);
-        auto response = co_await client_->get(t);
+        auto response = client_->get(t);
         if (response.result() == http::status::ok) {
             // extract the ots value here while we have the path
             // GET /Advanced.aspx?ots=WJFUMNFE
@@ -107,7 +104,7 @@ auto rest_api::open_client(std::string_view target, int depth)
             account_id_ = extract_account_id(body);
             get_market_details_url_ = std::format(
                 "/UTSAPI.asmx/GetMarketDetails?AccountID={}", account_id_);
-            co_return std::make_pair(ots, login_id);
+            return std::make_pair(ots, login_id);
         }
         verify(response.result() == http::status::found,
                "unexpected response from {}: result={}", t,
@@ -119,11 +116,10 @@ auto rest_api::open_client(std::string_view target, int depth)
     throw fail("max depth reached: {}", target);
 }
 
-auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
-    auto ex = co_await net::this_coro::executor;
-    client_ = std::make_unique<http_client>(ex, url.host());
+auto rest_api::connect(boost::urls::url url) -> rest_api::auth_info {
+    client_ = std::make_unique<http_client>(url.host());
     spdlog::info("Opening {}", url.buffer());
-    auto [ots, login_id] = co_await open_client(url.encoded_target());
+    auto [ots, login_id] = open_client(url.encoded_target());
     auto token = client_->jar().get(ots);
 
     const auto referer =
@@ -138,36 +134,33 @@ auto rest_api::connect(boost::urls::url url) -> awaitable<rest_api::auth_info> {
     client_->default_headers().emplace("Content-Type",
                                        "application/json; charset=utf-8");
     client_->default_headers().emplace("X-Requested-With", "XMLHttpRequest");
-    co_return auth_info{token.value, login_id};
+    return auth_info{token.value, login_id};
 }
 
-auto rest_api::get_market_super_group()
-    -> awaitable<std::vector<market_group>> {
-    co_return co_await make_post<std::vector<market_group>>(
+auto rest_api::get_market_super_group() -> std::vector<market_group> {
+    return make_post<std::vector<market_group>>(
         client_.get(), "/UTSAPI.asmx/GetMarketSuperGroup", std::nullopt);
 }
 
 auto rest_api::get_market_group(int super_group_id)
-    -> awaitable<std::vector<market_group>> {
+    -> std::vector<market_group> {
     json body = {{"superGroupId", super_group_id}};
-    co_return co_await make_post<std::vector<market_group>>(
+    return make_post<std::vector<market_group>>(
         client_.get(), "/UTSAPI.asmx/GetMarketGroup", body.dump());
 }
 
-auto rest_api::get_market_quote(int group_id)
-    -> awaitable<std::vector<market>> {
+auto rest_api::get_market_quote(int group_id) -> std::vector<market> {
     json body = {
         {"groupID", group_id}, {"keyword", ""},   {"popular", false},
         {"portfolio", false},  {"search", false},
     };
-    co_return co_await make_post<std::vector<market>>(
+    return make_post<std::vector<market>>(
         client_.get(), "/UTSAPI.asmx/GetMarketQuote", body.dump());
 }
 
-auto rest_api::get_market_details(int market_id)
-    -> awaitable<market_details_response> {
+auto rest_api::get_market_details(int market_id) -> market_details_response {
     json body = {{"marketID", market_id}};
-    co_return co_await make_post<market_details_response>(
+    return make_post<market_details_response>(
         client_.get(), get_market_details_url_, body.dump());
 }
 
@@ -178,27 +171,24 @@ auto rest_api::get_market_details(int market_id)
 // }
 
 auto rest_api::backfill(int market_id, int /*quote_id*/, size_t sz,
-                        chart_duration /*dur*/)
-    -> awaitable<std::vector<candle>> {
-    // auto chart_url = co_await get_chart_url(market_id);
+                        chart_duration /*dur*/) -> std::vector<candle> {
+    // auto chart_url = get_chart_url(market_id);
     // spdlog::info("chart url: {}", chart_url.buffer());
 
     // FIXME
-    auto hc = http_client(co_await boost::asio::this_coro::executor,
-                          "charts.finsatechnology.com");
+    auto hc = http_client("charts.finsatechnology.com");
     auto target = std::format("/data/minute/{}/mid?l={}", market_id, sz);
-    auto response = co_await hc.get(target);
+    auto response = hc.get(target);
     auto j = json::parse(get_http_body(response));
     auto data = j.at("data").get<std::vector<std::string>>();
     auto rv = std::vector<candle>(sz);
     for (size_t i = 0; i < sz; ++i) {
         rv[i] = parse_candle(data[i]);
     }
-    co_return rv;
+    return rv;
 }
 
-auto rest_api::trade(const trade_request &request)
-    -> awaitable<trade_response> {
+auto rest_api::trade(const trade_request &request) -> trade_response {
     json body = {{"marketID", request.market_id},
                  {"quoteID", request.quote_id},
                  {"price", request.price},
@@ -218,12 +208,12 @@ auto rest_api::trade(const trade_request &request)
                  {"userAgent", "Firefox (139.0)"},
                  {"key", request.key}};
 
-    auto result = co_await make_post<trade_response>(
+    auto result = make_post<trade_response>(
         client_.get(), "/UTSAPI.asmx/RequestTrade", body.dump());
-    co_return result;
+    return result;
 }
 
-auto rest_api::sim_trade(const trade_request &request) -> awaitable<void> {
+auto rest_api::sim_trade(const trade_request &request) -> void {
     json body = {{"marketID", request.market_id},
                  {"quoteID", request.quote_id},
                  {"price", request.price},
@@ -242,8 +232,7 @@ auto rest_api::sim_trade(const trade_request &request) -> awaitable<void> {
                  {"isKaazingFeed", true},
                  {"userAgent", "Firefox (139.0)"},
                  {"key", request.key}};
-    co_await make_post<trade_response>(
-        client_.get(), "/UTSAPI.asmx/RequestTradeSimulate", body.dump());
-    co_return;
+    make_post<trade_response>(client_.get(),
+                              "/UTSAPI.asmx/RequestTradeSimulate", body.dump());
 }
 } // namespace td365

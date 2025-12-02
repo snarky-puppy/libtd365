@@ -54,11 +54,6 @@ class td365 {
                                  chart_duration dur);
 
   private:
-    template <typename Awaitable>
-    auto run_awaitable(Awaitable awaitable) -> typename Awaitable::value_type;
-
-    auto run_awaitable(boost::asio::awaitable<void>) -> void;
-
     rest_api rest_client_;
     ws_client ws_client_;
 };

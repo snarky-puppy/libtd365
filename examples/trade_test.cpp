@@ -17,6 +17,7 @@
 #include <iostream>
 #include <spdlog/spdlog.h>
 #include <td365/td365.h>
+#include <variant>
 #include <vector>
 
 struct candle_agg {
@@ -119,35 +120,10 @@ struct signals {
 
 struct strategy {
 
-    explicit strategy(boost::asio::any_io_executor ioc) {
-        client.callbacks() = td365::user_callbacks{
-            .tick_cb =
-                [&](td365::tick &&t) {
-                    boost::asio::post(ioc, [this, t = std::move(t)]() mutable {
-                        on_tick(std::move(t));
-                    });
-                },
-            .acc_summary_cb =
-                [&](td365::account_summary &&a) {
-                    boost::asio::post(ioc, [this, a = std::move(a)]() mutable {
-                        on_account_summary(std::move(a));
-                    });
-                },
-            .acc_detail_cb =
-                [&](td365::account_details &&a) {
-                    boost::asio::post(ioc, [this, a = std::move(a)]() mutable {
-                        on_account_details(std::move(a));
-                    });
-                },
-            .trade_response_cb =
-                [&](td365::trade_response &&r) {
-                    boost::asio::post(ioc, [this, r = std::move(r)]() mutable {
-                        on_trade_response(std::move(r));
-                    });
-                },
-        };
-
+    explicit strategy() {
         client.connect();
+        setup_subscription();
+        backfill();
     }
 
     int n_ticks = 0;
@@ -157,8 +133,7 @@ struct strategy {
             buy(t);
         }
         n_ticks++;
-        // spdlog::info("tick: {}", n_ticks);
-        switch (signals.on_tick(t)) {
+        switch (sig.on_tick(t)) {
         case signals::value::none:
             break;
         case signals::value::buy:
@@ -173,7 +148,7 @@ struct strategy {
     }
 
     void buy(const td365::tick &t) {
-        client.trade({
+        auto response = client.trade({
             .dir = td365::trade_request::direction::buy,
             .market_id = market.market_id,
             .quote_id = market.quote_id,
@@ -183,10 +158,16 @@ struct strategy {
             .limit = t.ask + 10,
             .key = t.hash,
         });
+
+        if (response.accepted) {
+            spdlog::info("Buy order submitted, order_id={}", response.order_id);
+        } else {
+            spdlog::error("Buy order rejected: {}", response.message);
+        }
     }
 
     void sell(const td365::tick &t) {
-        client.trade({
+        auto response = client.trade({
             .dir = td365::trade_request::direction::sell,
             .market_id = market.market_id,
             .quote_id = market.quote_id,
@@ -196,18 +177,26 @@ struct strategy {
             .limit = t.bid - 10,
             .key = t.hash,
         });
+
+        if (response.accepted) {
+            spdlog::info("Sell order submitted, order_id={}", response.order_id);
+        } else {
+            spdlog::error("Sell order rejected: {}", response.message);
+        }
     }
 
     void on_account_summary(td365::account_summary &&summary) {
         spdlog::info("on_account_summary: balance={}", summary.account_balance);
     }
+
     void on_account_details(td365::account_details &&details) {
         spdlog::info("on_account_details: positions={}",
                      details.positions.total_records);
     }
 
-    void on_trade_response(td365::trade_response &&) {
-        spdlog::info("on_trade_response");
+    void on_trade_established(td365::trade_details &&details) {
+        spdlog::info("Trade established: position_id={}, opening_price={}",
+                     details.position_id, details.opening_price);
     }
 
     void setup_subscription() {
@@ -236,25 +225,62 @@ struct strategy {
     void backfill() {
         auto candles = client.backfill(market.market_id, market.quote_id, 3,
                                        td365::chart_duration::m1);
-        signals.agg.backfill(candles);
+        sig.agg.backfill(candles);
+    }
+
+    void run() {
+        while (true) {
+            auto evt = client.wait();
+
+            bool should_exit = false;
+            std::visit(
+                [this, &should_exit](auto &&e) {
+                    using T = std::decay_t<decltype(e)>;
+                    if constexpr (std::is_same_v<T, td365::tick_event>) {
+                        spdlog::info("on_tick");
+                        on_tick(std::move(e.data));
+                    } else if constexpr (std::is_same_v<
+                                             T, td365::account_summary_event>) {
+                        on_account_summary(std::move(e.data));
+                    } else if constexpr (std::is_same_v<
+                                             T, td365::account_details_event>) {
+                        on_account_details(std::move(e.data));
+                    } else if constexpr (std::is_same_v<
+                                             T,
+                                             td365::trade_established_event>) {
+                        on_trade_established(std::move(e.data));
+                    } else if constexpr (std::is_same_v<T, td365::error_event>) {
+                        spdlog::error("Error: {}", e.message);
+                    } else if constexpr (std::is_same_v<
+                                             T,
+                                             td365::connection_closed_event>) {
+                        spdlog::info("Connection closed");
+                        should_exit = true;
+                    } else if constexpr (std::is_same_v<T,
+                                                         td365::timeout_event>) {
+                        // Timeout - continue waiting
+                    }
+                },
+                evt);
+
+            if (should_exit) {
+                break;
+            }
+        }
     }
 
     td365::td365 client;
-    struct signals signals;
+    struct signals sig;
     td365::market market;
 };
 
 int main(int, char **) {
     std::set_terminate(boost::core::verbose_terminate_handler);
 
-    boost::asio::io_context ioc;
     spdlog::set_level(spdlog::level::debug);
 
-    auto strat = strategy(ioc.get_executor());
-    strat.setup_subscription();
-    strat.backfill();
-
-    ioc.run();
+    auto strat = strategy();
+    strat.run();
 
     return 0;
 }
