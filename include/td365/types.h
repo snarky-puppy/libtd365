@@ -275,6 +275,8 @@ struct trade_details {
     std::string creation_time_utc;
 };
 
+void from_json(nlohmann::json const &j, trade_details &t);
+
 struct market_details {
     int market_id;
     int quote_id;

@@ -35,8 +35,6 @@ class td365 {
 
     ~td365();
 
-    user_callbacks &callbacks() { return callbacks_; }
-
     void connect(const std::string &username, const std::string &password,
                  const std::string &account_id);
 
@@ -51,7 +49,7 @@ class td365 {
     std::vector<market_group> get_market_group(int id);
     std::vector<market> get_market_quote(int id);
     market_details_response get_market_details(int id);
-    void trade(const trade_request &&request);
+    trade_response trade(const trade_request &&request);
     std::vector<candle> backfill(int market_id, int quote_id, size_t sz,
                                  chart_duration dur);
 
@@ -61,20 +59,7 @@ class td365 {
 
     auto run_awaitable(boost::asio::awaitable<void>) -> void;
 
-    user_callbacks callbacks_;
-    boost::asio::io_context io_context_;
-    std::thread io_thread_;
-
     rest_api rest_client_;
     ws_client ws_client_;
-
-    std::atomic<bool> shutdown_{false};
-
-    std::promise<void> connect_p_;
-    std::future<void> connect_f_;
-
-    void connect(std::function<boost::asio::awaitable<web_detail>()> f);
-
-    void start_io_thread();
 };
 } // namespace td365

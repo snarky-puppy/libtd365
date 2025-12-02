@@ -634,4 +634,16 @@ void from_json(nlohmann::json const &j, account_details &a) {
         a.positions.total_records = 0;
     j.at("TradingAccountType").get_to(a.trading_account_type);
 }
+
+void from_json(nlohmann::json const &j, trade_details &t) {
+    j.at("PositionID").get_to(t.position_id);
+    j.at("OrderID").get_to(t.order_id);
+    j.at("MarketID").get_to(t.market_id);
+    j.at("QuoteID").get_to(t.quote_id);
+    j.at("OpeningPrice").get_to(t.opening_price);
+    j.at("Stake").get_to(t.stake);
+    j.at("Direction").get_to(t.direction);
+    j.at("CreationTime").get_to(t.creation_time);
+    j.at("CreationTimeUTC").get_to(t.creation_time_utc);
+}
 } // namespace td365
