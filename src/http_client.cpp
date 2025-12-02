@@ -5,20 +5,15 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <boost/asio/awaitable.hpp>
-#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/http/dynamic_body.hpp>
 #include <boost/beast/ssl/ssl_stream.hpp>
-#include <boost/beast/version.hpp>
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
-#include <boost/url/url.hpp>
 #include <td365/constants.h>
 #include <td365/http_client.h>
 #include <td365/utils.h>
@@ -29,7 +24,6 @@ namespace net = boost::asio;
 namespace beast = boost::beast;
 namespace http = beast::http;
 using tcp = net::ip::tcp;
-using net::awaitable;
 namespace ssl = boost::asio::ssl;
 
 constexpr auto const kBodySizeLimit = 128U * 1024U * 1024U; // 128 M
@@ -48,13 +42,13 @@ const http_headers no_headers{};
 const http_headers application_json_headers{
     {to_string(http::field::content_type), "application/json; charset=utf-8"}};
 
-http_client::http_client(boost::asio::any_io_executor ex, std::string host)
-    : stream_(ex, ssl_ctx()), host_(std::move(host)), jar_(host_ + ".cookies"),
-      default_headers_(create_default_headers()) {
+http_client::http_client(std::string host)
+    : stream_(io_context_, ssl_ctx()), host_(std::move(host)),
+      jar_(host_ + ".cookies"), default_headers_(create_default_headers()) {
     default_headers_.emplace(to_string(http::field::host), host_);
 }
 
-awaitable<void> http_client::ensure_connected() {
+void http_client::ensure_connected() {
     if (!stream_.lowest_layer().is_open()) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
         if (!SSL_set_tlsext_host_name(stream_.native_handle(),
@@ -64,23 +58,19 @@ awaitable<void> http_client::ensure_connected() {
                  boost::asio::error::get_ssl_category()}};
         }
 
-        auto const ep = co_await td_resolve(host_, "443");
-        co_await beast::get_lowest_layer(stream_).async_connect(
-            *ep.begin(), boost::asio::use_awaitable);
+        tcp::resolver resolver(io_context_);
+        auto const endpoints = resolver.resolve(host_, "443");
+        boost::asio::connect(beast::get_lowest_layer(stream_), endpoints);
 
-        co_await stream_.async_handshake(ssl::stream_base::client,
-                                         boost::asio::use_awaitable);
+        stream_.handshake(ssl::stream_base::client);
     }
-
-    co_return;
 }
 
-boost::asio::awaitable<http_response>
-http_client::send(boost::beast::http::verb verb, std::string_view target,
-                  std::optional<std::string> body,
-                  std::optional<http_headers> headers) {
-    co_await ensure_connected();
-    auto ex = co_await boost::asio::this_coro::executor;
+http_response http_client::send(boost::beast::http::verb verb,
+                                std::string_view target,
+                                std::optional<std::string> body,
+                                std::optional<http_headers> headers) {
+    ensure_connected();
 
     auto req = http::request<http::string_body>{verb, target, 11};
 
@@ -106,43 +96,39 @@ http_client::send(boost::beast::http::verb verb, std::string_view target,
     }
 
     try {
-        co_await http::async_write(stream_, req, boost::asio::use_awaitable);
+        http::write(stream_, req);
 
         auto p = http::response_parser<http::dynamic_body>{};
         p.eager(true);
         p.body_limit(kBodySizeLimit);
 
         auto buffer = beast::flat_buffer{};
-        co_await http::async_read(stream_, buffer, p,
-                                  boost::asio::use_awaitable);
+        http::read(stream_, buffer, p);
 
         auto response = p.release();
 
         jar_.update(response);
 
-        co_return response;
+        return response;
     } catch (const boost::beast::error_code &ec) {
         if (ec == http::error::end_of_stream) {
             stream_.lowest_layer().close();
-            stream_ = stream_t(ex, ssl_ctx());
+            stream_ = stream_t(io_context_, ssl_ctx());
         } else {
             spdlog::error("http_client::send: {}", ec.message());
         }
-        throw ec;
+        throw;
     }
-
-    http_response resp{boost::beast::http::status::unknown, 11};
-    co_return resp;
 }
 
-awaitable<http_response> http_client::get(std::string_view target,
-                                          std::optional<http_headers> headers) {
-    co_return co_await send(http::verb::get, target, std::nullopt, headers);
+http_response http_client::get(std::string_view target,
+                               std::optional<http_headers> headers) {
+    return send(http::verb::get, target, std::nullopt, headers);
 }
 
-awaitable<http_response>
-http_client::post(std::string_view target, std::optional<std::string> body,
-                  std::optional<http_headers> headers) {
-    co_return co_await send(http::verb::post, target, body, headers);
+http_response http_client::post(std::string_view target,
+                                std::optional<std::string> body,
+                                std::optional<http_headers> headers) {
+    return send(http::verb::post, target, body, headers);
 }
 } // namespace td365

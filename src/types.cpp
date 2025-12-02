@@ -5,6 +5,8 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
+#include "charconv_compat.h"
+
 #include <nlohmann/json.hpp>
 #include <ranges>
 #include <sstream>
@@ -84,7 +86,7 @@ void tick::parse(const std::string_view line) {
     // Helper lambda to parse double
     auto parse_double = [](std::string_view sv) -> double {
         double value{};
-        auto result = std::from_chars(sv.data(),
+        auto result = charconv_compat::from_chars(sv.data(),
                                                   sv.data() + sv.size(), value);
         if (result.ec != std::errc{}) {
             throw std::invalid_argument("Invalid double: " + std::string(sv));
@@ -95,7 +97,7 @@ void tick::parse(const std::string_view line) {
     // Helper lambda to parse int
     auto parse_int = [](std::string_view sv) -> int {
         int value{};
-        auto result = std::from_chars(sv.data(),
+        auto result = charconv_compat::from_chars(sv.data(),
                                                   sv.data() + sv.size(), value);
         if (result.ec != std::errc{}) {
             throw std::invalid_argument("Invalid int: " + std::string(sv));
@@ -631,5 +633,17 @@ void from_json(nlohmann::json const &j, account_details &a) {
     else
         a.positions.total_records = 0;
     j.at("TradingAccountType").get_to(a.trading_account_type);
+}
+
+void from_json(nlohmann::json const &j, trade_details &t) {
+    j.at("PositionID").get_to(t.position_id);
+    j.at("OrderID").get_to(t.order_id);
+    j.at("MarketID").get_to(t.market_id);
+    j.at("QuoteID").get_to(t.quote_id);
+    j.at("OpeningPrice").get_to(t.opening_price);
+    j.at("Stake").get_to(t.stake);
+    j.at("Direction").get_to(t.direction);
+    j.at("CreationTime").get_to(t.creation_time);
+    j.at("CreationTimeUTC").get_to(t.creation_time_utc);
 }
 } // namespace td365

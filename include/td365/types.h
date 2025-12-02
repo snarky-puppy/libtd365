@@ -10,9 +10,11 @@
 #include <boost/asio/detail/descriptor_ops.hpp>
 #include <boost/beast/websocket/stream_base.hpp>
 #include <chrono>
+#include <exception>
 #include <functional>
 #include <nlohmann/json_fwd.hpp>
 #include <string>
+#include <variant>
 
 namespace td365 {
 struct market_group {
@@ -112,7 +114,12 @@ struct trade_request {
     std::string key;
 };
 
-struct trade_response {};
+struct trade_response {
+    bool accepted;
+    std::string message;
+    int64_t order_id;
+    int status_code;
+};
 
 struct account_summary {
     std::string account_id;
@@ -256,7 +263,19 @@ void to_json(nlohmann::json &j, account_details const &a);
 
 void from_json(nlohmann::json const &j, account_details &a);
 
-struct trade_details {};
+struct trade_details {
+    int64_t position_id;
+    int64_t order_id;
+    int market_id;
+    int quote_id;
+    double opening_price;
+    double stake;
+    std::string direction;
+    std::string creation_time;
+    std::string creation_time_utc;
+};
+
+void from_json(nlohmann::json const &j, trade_details &t);
 
 struct market_details {
     int market_id;
@@ -371,6 +390,37 @@ struct candle {
     double volume;
 };
 
+struct tick_event {
+    tick data;
+};
+
+struct account_summary_event {
+    account_summary data;
+};
+
+struct account_details_event {
+    account_details data;
+};
+
+struct trade_established_event {
+    trade_details data;
+};
+
+struct error_event {
+    std::string message;
+    std::exception_ptr exception;
+};
+
+struct connection_closed_event {};
+
+struct timeout_event {};
+
+using event = std::variant<tick_event, account_summary_event,
+                           account_details_event, trade_established_event,
+                           error_event, connection_closed_event, timeout_event>;
+
+// DEPRECATED: Will be removed in future version. Use td365::wait() and event
+// variant instead.
 struct user_callbacks {
     using tick_cb_type = std::function<void(tick &&)>;
     using acc_summary_type = std::function<void(account_summary &&)>;

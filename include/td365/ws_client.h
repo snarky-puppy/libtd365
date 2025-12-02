@@ -23,59 +23,49 @@ namespace td365 {
 
 class ws_client {
   public:
-    explicit ws_client(const user_callbacks &);
+    explicit ws_client();
 
     ~ws_client();
 
-    boost::asio::awaitable<void> connect(boost::urls::url_view);
+    void connect(boost::urls::url_view url, const std::string &login_id,
+                 const std::string &token);
 
-    boost::asio::awaitable<void> message_loop(const std::string &login_id,
-                                              const std::string &token,
-                                              std::atomic<bool> &shutdown);
+    event
+    read_and_process_message(std::optional<std::chrono::milliseconds> timeout);
 
-    boost::asio::awaitable<void> send(const nlohmann::json &);
+    void send(const nlohmann::json &);
 
-    boost::asio::awaitable<void> subscribe(int quote_id);
+    void subscribe(int quote_id);
 
-    boost::asio::awaitable<void> unsubscribe(int quote_id);
-
-    void wait_for_auth();
-
-    boost::asio::awaitable<void> run(boost::urls::url_view url,
-                                     const std::string &login_id,
-                                     const std::string &token,
-                                     std::atomic<bool> &shutdown);
+    void unsubscribe(int quote_id);
 
   private:
-    void process_subscribe_response(const nlohmann::json &msg);
+    std::optional<event> process_subscribe_response(const nlohmann::json &msg);
 
-    boost::asio::awaitable<void>
-    process_reconnect_response(const nlohmann::json &msg);
+    std::optional<event> process_reconnect_response(const nlohmann::json &msg);
 
-    boost::asio::awaitable<void> process_heartbeat(const nlohmann::json &msg);
+    std::optional<event> process_heartbeat(const nlohmann::json &msg);
 
-    boost::asio::awaitable<void>
-    process_connect_response(const nlohmann::json &msg,
-                             const std::string &login_id,
-                             const std::string &token);
+    std::optional<event> process_connect_response(const nlohmann::json &msg,
+                                                  const std::string &login_id,
+                                                  const std::string &token);
 
-    boost::asio::awaitable<void>
+    std::optional<event>
     process_authentication_response(const nlohmann::json &msg);
 
-    void process_price_data(const nlohmann::json &msg);
-    void process_account_summary(const nlohmann::json &msg);
-    void process_account_details(const nlohmann::json &msg);
+    event process_price_data(const nlohmann::json &msg);
+    event process_account_summary(const nlohmann::json &msg);
+    event process_account_details(const nlohmann::json &msg);
+    event process_trade_established(const nlohmann::json &msg);
 
-    const user_callbacks &callbacks_;
     std::unique_ptr<ws> ws_;
     std::string supported_version_ = "1.0.0.6";
+    std::string login_id_;
+    std::string token_;
 
     // Connection state tracking
     std::string connection_id_;
     std::vector<int> subscribed_;
-
-    std::promise<void> auth_p_;
-    std::future<void> auth_f_;
 
     // Reconnection state
     boost::urls::url stored_url_;

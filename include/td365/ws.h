@@ -25,16 +25,17 @@ class ws {
   public:
     explicit ws();
 
-    boost::asio::awaitable<void> connect(boost::urls::url);
+    void connect(boost::urls::url);
 
-    boost::asio::awaitable<void> close();
+    void close();
 
-    boost::asio::awaitable<void> send(std::string_view message);
+    void send(std::string_view message);
 
-    boost::asio::awaitable<std::pair<boost::system::error_code, std::string>>
-    read_message();
+    std::pair<boost::system::error_code, std::string> read_message(
+        std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
   private:
+    boost::asio::io_context io_context_;
     std::unique_ptr<ssl_websocket_type> ssl_ws_;
     std::unique_ptr<plain_websocket_type> plain_ws_;
     bool using_ssl_;

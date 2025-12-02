@@ -24,7 +24,6 @@
 
 namespace td365 {
 namespace net = boost::asio;
-using net::use_awaitable;
 namespace ssl = boost::asio::ssl;
 using json = nlohmann::json;
 
@@ -37,7 +36,8 @@ enum class payload_type {
     subscribe_response,
     price_data,
     account_summary,
-    account_details
+    account_details,
+    trade_established
 };
 
 payload_type string_to_payload_type(std::string_view str) {
@@ -49,7 +49,8 @@ payload_type string_to_payload_type(std::string_view str) {
         {"subscribeResponse", payload_type::subscribe_response},
         {"p", payload_type::price_data},
         {"accountSummary", payload_type::account_summary},
-        {"accountDetails", payload_type::account_details}};
+        {"accountDetails", payload_type::account_details},
+        {"tradeEstablished", payload_type::trade_established}};
 
     auto it = lookup.find(str);
     return (it != lookup.end()) ? it->second : payload_type::unknown;
@@ -63,119 +64,117 @@ bool is_error_continuable(const boost::system::error_code &ec) {
     return false;
 }
 
-ws_client::ws_client(const user_callbacks &callbacks)
-    : callbacks_(callbacks), auth_f_(auth_p_.get_future()) {}
+ws_client::ws_client() {}
 
-ws_client::~ws_client() {
-    // Ensure that any ongoing future operations are cancelled
-    // This is important for the auth_f_ future that might be waited on
-    try {
-        if (auth_f_.valid() && auth_f_.wait_for(std::chrono::seconds(0)) ==
-                                   std::future_status::timeout) {
-            // If the promise hasn't been set, set it to avoid blocking
-            auth_p_.set_value();
-        }
-    } catch (const std::future_error &) {
-        // Promise already set or moved, ignore
-    } catch (...) {
-        // Ignore other exceptions during cleanup
+ws_client::~ws_client() = default;
+
+void ws_client::connect(boost::urls::url_view url, const std::string &login_id,
+                        const std::string &token) {
+    spdlog::info("ws_client: connecting to {}", url.buffer());
+    login_id_ = login_id;
+    token_ = token;
+    stored_url_ = url;
+
+    ws_ = std::make_unique<ws>();
+    ws_->connect(url);
+
+    // Read connect response
+    auto [ec, buf] = ws_->read_message();
+    if (ec) {
+        throw std::runtime_error("Failed to read connect response: " +
+                                 ec.message());
     }
 
-    // The ws_ unique_ptr will automatically clean up when destroyed
-    // This is safe because the destructor is only called after all
-    // coroutines using this object have completed
+    auto msg = nlohmann::json::parse(buf);
+    process_connect_response(msg, login_id, token);
+
+    // Read authentication response
+    std::tie(ec, buf) = ws_->read_message();
+    if (ec) {
+        throw std::runtime_error("Failed to read auth response: " +
+                                 ec.message());
+    }
+
+    msg = nlohmann::json::parse(buf);
+    process_authentication_response(msg);
 }
 
-boost::asio::awaitable<void> ws_client::connect(boost::urls::url_view u) {
-    spdlog::info("ws_client: connecting to {}", u.buffer());
-    ws_ = std::make_unique<ws>();
-    return ws_->connect(u);
-}
-
-boost::asio::awaitable<void> ws_client::subscribe(int quote_id) {
+void ws_client::subscribe(int quote_id) {
     if (std::ranges::find(subscribed_, quote_id) ==
         std::ranges::end(subscribed_)) {
         subscribed_.push_back(quote_id);
-        co_await send({{"quoteId", quote_id},
-                       {"priceGrouping", "Sampled"},
-                       {"action", "subscribe"}});
+        send({{"quoteId", quote_id},
+              {"priceGrouping", "Sampled"},
+              {"action", "subscribe"}});
     }
-    co_return;
 }
 
-boost::asio::awaitable<void> ws_client::unsubscribe(int quote_id) {
+void ws_client::unsubscribe(int quote_id) {
     auto pos = std::ranges::find(subscribed_, quote_id);
     if (pos != std::ranges::end(subscribed_)) {
         subscribed_.erase(pos);
-        co_await send({{"quoteId", quote_id},
-                       {"priceGrouping", "Sampled"},
-                       {"action", "unsubscribe"}});
+        send({{"quoteId", quote_id},
+              {"priceGrouping", "Sampled"},
+              {"action", "unsubscribe"}});
     }
-    co_return;
 }
 
-boost::asio::awaitable<void> ws_client::send(const nlohmann::json &body) {
-    co_await ws_->send(body.dump());
-    co_return;
-}
+void ws_client::send(const nlohmann::json &body) { ws_->send(body.dump()); }
 
-boost::asio::awaitable<void>
-ws_client::message_loop(const std::string &login_id, const std::string &token,
-                        std::atomic<bool> &shutdown) {
-    while (!shutdown) {
-        auto [ec, buf] = co_await ws_->read_message();
+event ws_client::read_and_process_message(
+    std::optional<std::chrono::milliseconds> timeout) {
+    while (true) {
+        auto [ec, buf] = ws_->read_message(timeout);
         if (ec) {
-            spdlog::error("ws_client::message_loop: read_message failed: {}",
-                          ec.message());
-            if (is_error_continuable(ec)) {
-                // FIXME
-                auth_p_ = std::promise<void>();
-                auth_f_ = auth_p_.get_future();
-                co_return;
+            if (ec == boost::asio::error::operation_aborted ||
+                ec == boost::beast::error::timeout) {
+                return timeout_event{};
             }
-            spdlog::info("ws_client::message_loop: not continuable");
-            throw ec;
+            if (is_error_continuable(ec)) {
+                return connection_closed_event{};
+            }
+            return error_event{ec.message(), std::current_exception()};
         }
 
         auto msg = nlohmann::json::parse(buf);
 
+        std::optional<event> evt;
         switch (string_to_payload_type(msg["t"].get<std::string>())) {
         case payload_type::connect_response:
-            co_await process_connect_response(msg, login_id, token);
+            evt = process_connect_response(msg, login_id_, token_);
             break;
         case payload_type::reconnect_response:
-            co_await process_reconnect_response(msg);
+            evt = process_reconnect_response(msg);
             break;
         case payload_type::heartbeat:
-            co_await process_heartbeat(msg);
+            evt = process_heartbeat(msg);
             break;
         case payload_type::authentication_response:
-            co_await process_authentication_response(msg);
+            evt = process_authentication_response(msg);
             break;
         case payload_type::subscribe_response:
-            process_subscribe_response(msg);
+            evt = process_subscribe_response(msg);
             break;
         case payload_type::price_data:
-            process_price_data(msg);
-            break;
+            return process_price_data(msg);
         case payload_type::account_summary:
-            process_account_summary(msg);
-            break;
+            return process_account_summary(msg);
         case payload_type::account_details:
-            process_account_details(msg);
-            break;
+            return process_account_details(msg);
+        case payload_type::trade_established:
+            return process_trade_established(msg);
         default:
-            std::cerr << "Unhandled message" << msg.dump() << std::endl;
+            spdlog::warn("Unhandled message: {}", msg.dump());
+        }
+
+        if (evt) {
+            return *evt;
         }
     }
-    std::cout << "ws_client exiting" << std::endl;
-    co_return;
 }
 
-boost::asio::awaitable<void>
-ws_client::process_heartbeat(const nlohmann::json &j) {
-    auto now = now_utc();
-    co_await send({
+std::optional<event> ws_client::process_heartbeat(const nlohmann::json &j) {
+    send({
         {"SentByServer", j["d"]["SentByServer"]},
         {"MessagesReceived", j["d"]["MessagesReceived"]},
         {"PricesReceived", j["d"]["PricesReceived"]},
@@ -184,56 +183,54 @@ ws_client::process_heartbeat(const nlohmann::json &j) {
         {"Visible", true},
         {"action", "heartbeat"},
     });
-    co_return;
+    return std::nullopt;
 }
 
-boost::asio::awaitable<void>
+std::optional<event>
 ws_client::process_reconnect_response(const nlohmann::json &msg) {
     connection_id_ = msg["cid"].get<std::string>();
-    co_return;
+    return std::nullopt;
 }
 
-boost::asio::awaitable<void>
+std::optional<event>
 ws_client::process_connect_response(const nlohmann::json &,
                                     const std::string &login_id,
                                     const std::string &token) {
-    co_await send({{"action", "authentication"},
-                   {"loginId", login_id},
-                   {"tradingAccountType", "SPREAD"},
-                   {"token", token},
-                   {"reason", "Connect"},
-                   {"clientVersion", supported_version_}});
-    co_return;
+    send({{"action", "authentication"},
+          {"loginId", login_id},
+          {"tradingAccountType", "SPREAD"},
+          {"token", token},
+          {"reason", "Connect"},
+          {"clientVersion", supported_version_}});
+    return std::nullopt;
 }
 
-boost::asio::awaitable<void>
+std::optional<event>
 ws_client::process_authentication_response(const nlohmann::json &msg) {
     if (!msg["d"]["Result"].get<bool>()) {
         throw std::runtime_error("Authentication failed");
     }
     if (!connection_id_.empty()) {
-        co_await send({{"action", "reconnect"},
-                       {"originalConnectionId", connection_id_}});
+        send({{"action", "reconnect"},
+              {"originalConnectionId", connection_id_}});
     }
     connection_id_ = msg["cid"].get<std::string>();
 
     // subscribe to account summary
-    // nb, no constexpr json yet
-    co_await send({{"data", "{\"SubscribeToAccountSummary\":true,"
-                            "\"SubscribeToAccountDetails\":true}"},
-                   {"action", "options"}});
+    send({{"data", "{\"SubscribeToAccountSummary\":true,"
+                   "\"SubscribeToAccountDetails\":true}"},
+          {"action", "options"}});
 
     // re-establish previous quote subscriptions
     for (auto quote_id : subscribed_) {
-        co_await send({{"quoteId", quote_id},
-                       {"priceGrouping", "Sampled"},
-                       {"action", "subscribe"}});
+        send({{"quoteId", quote_id},
+              {"priceGrouping", "Sampled"},
+              {"action", "subscribe"}});
     }
-    auth_p_.set_value();
-    co_return;
+    return std::nullopt;
 }
 
-void ws_client::process_price_data(const nlohmann::json &msg) {
+event ws_client::process_price_data(const nlohmann::json &msg) {
     const auto &data = msg["d"];
 
     for (const auto &key : grouping_map) {
@@ -241,47 +238,44 @@ void ws_client::process_price_data(const nlohmann::json &msg) {
             it != data.end() && it->is_array() && !it->empty()) {
             auto prices = it->get<std::vector<std::string>>();
             for (const auto &price : prices) {
-                callbacks_.tick_cb(parse_td_tick(price, key.second));
+                return tick_event{parse_td_tick(price, key.second)};
             }
         }
     }
+    throw std::runtime_error("process_price_data: no price data found");
 }
 
-void ws_client::process_subscribe_response(const nlohmann::json &msg) {
+std::optional<event>
+ws_client::process_subscribe_response(const nlohmann::json &msg) {
     auto d = msg["d"];
     verify(d["HasError"].get<bool>() == false, "HasError is true");
     auto prices = d["Current"].get<std::vector<std::string>>();
     auto g = string_to_price_type(d["PriceGrouping"].get<std::string>());
-    for (const auto &p : prices) {
-        callbacks_.tick_cb(parse_td_tick(p, g));
+    if (!prices.empty()) {
+        return tick_event{parse_td_tick(prices[0], g)};
     }
+    return std::nullopt;
 }
 
-void ws_client::process_account_summary(const nlohmann::json &msg) {
+event ws_client::process_account_summary(const nlohmann::json &msg) {
     spdlog::info("account summary received: {}", msg.dump());
     if (msg.at("d").at("PlatformID").get<int>() == 0) {
         spdlog::info("account summary: skip platform 0:", msg.dump());
-        return;
+        throw std::runtime_error("Skipping platform 0 account summary");
     }
     auto summary = msg["d"].get<account_summary>();
-    callbacks_.acc_summary_cb(std::move(summary));
+    return account_summary_event{std::move(summary)};
 }
 
-void ws_client::process_account_details(const nlohmann::json &msg) {
+event ws_client::process_account_details(const nlohmann::json &msg) {
     spdlog::info("account details received: {}", msg.dump());
     auto details = msg["d"].get<account_details>();
-    callbacks_.acc_detail_cb(std::move(details));
+    return account_details_event{std::move(details)};
 }
 
-void ws_client::wait_for_auth() { auth_f_.get(); }
-
-boost::asio::awaitable<void> ws_client::run(boost::urls::url_view url,
-                                            const std::string &login_id,
-                                            const std::string &token,
-                                            std::atomic<bool> &shutdown) {
-    while (!shutdown.load()) {
-        co_await connect(url);
-        co_await message_loop(login_id, token, shutdown);
-    }
+event ws_client::process_trade_established(const nlohmann::json &msg) {
+    spdlog::info("trade established received: {}", msg.dump());
+    auto details = msg["d"].get<trade_details>();
+    return trade_established_event{std::move(details)};
 }
 } // namespace td365

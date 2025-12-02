@@ -5,7 +5,8 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
-#include <charconv>
+#include "charconv_compat.h"
+
 #include <iomanip>
 #include <iostream>
 #include <ranges>
@@ -58,7 +59,8 @@ grouping string_to_price_type(std::string_view key) {
 
 template <typename T> T parse(std::string_view sv) {
     T value{};
-    auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), value);
+    auto [ptr, ec] =
+        charconv_compat::from_chars(sv.data(), sv.data() + sv.size(), value);
     verify(ec == std::errc(), "bad parse: {}", sv);
     return value;
 }
@@ -100,9 +102,9 @@ tick parse_td_tick(std::string_view price_string, grouping price_type) {
 
     int64_t windows_ticks{};
     {
-        auto [ptr, ec] = std::from_chars(fields[11].data(),
-                                         fields[11].data() + fields[11].size(),
-                                         windows_ticks);
+        auto [ptr, ec] = charconv_compat::from_chars(
+            fields[11].data(), fields[11].data() + fields[11].size(),
+            windows_ticks);
         if (ec != std::errc())
             throw fail("Bad ticks: ", std::string(fields[11]));
     }
@@ -211,7 +213,8 @@ candle parse_candle(std::string_view candle_string) {
 std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds>
 string_to_timepoint(std::string_view s) {
     long long ns{};
-    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), ns);
+    auto [ptr, ec] =
+        charconv_compat::from_chars(s.data(), s.data() + s.size(), ns);
 
     verify(ec == std::errc(), "invalid timestamp: {}: {}", s,
            std::make_error_code(ec).message());
@@ -223,7 +226,8 @@ string_to_timepoint(std::string_view s) {
 
 std::chrono::nanoseconds string_to_duration(std::string_view s) {
     long long ns{};
-    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), ns);
+    auto [ptr, ec] =
+        charconv_compat::from_chars(s.data(), s.data() + s.size(), ns);
     verify(ec == std::errc(), "invalid duration: {}: {}", s,
            std::make_error_code(ec).message());
     return std::chrono::nanoseconds{ns};

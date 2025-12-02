@@ -9,6 +9,25 @@ include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Check if std::from_chars is available for floating point
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("
+    #include <charconv>
+    int main() {
+        double value;
+        const char* str = \"3.14\";
+        std::from_chars(str, str + 4, value);
+        return 0;
+    }
+" HAVE_STD_FROM_CHARS)
+
+if (HAVE_STD_FROM_CHARS)
+    add_compile_definitions(HAVE_STD_FROM_CHARS)
+    message(STATUS "std::from_chars is available")
+else ()
+    message(STATUS "std::from_chars not available, will use Boost.Charconv")
+endif ()
+
 # clang has no documentation installed on MacOS
 # https://releases.llvm.org/4.0.0/tools/clang/docs/DiagnosticsReference.html#wall
 add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wconversion -fno-omit-frame-pointer)
@@ -39,7 +58,14 @@ set(Boost_USE_STATIC_LIBS OFF) # use shared libs for debian package
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF) # do not look for boost libraries linked against static C++ std lib
 
-find_package(Boost REQUIRED COMPONENTS thread iostreams url)
+set(boost_components thread iostreams url)
+
+if (NOT HAVE_STD_FROM_CHARS)
+    list(APPEND boost_components charconv)
+endif ()
+
+find_package(Boost REQUIRED COMPONENTS ${boost_components})
+
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
