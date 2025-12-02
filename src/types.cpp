@@ -5,6 +5,8 @@
  * Use in compliance with the Prosperity Public License 3.0.0.
  */
 
+#include "charconv_compat.h"
+
 #include <nlohmann/json.hpp>
 #include <ranges>
 #include <sstream>
@@ -84,7 +86,7 @@ void tick::parse(const std::string_view line) {
     // Helper lambda to parse double
     auto parse_double = [](std::string_view sv) -> double {
         double value{};
-        auto result = std::from_chars(sv.data(),
+        auto result = charconv_compat::from_chars(sv.data(),
                                                   sv.data() + sv.size(), value);
         if (result.ec != std::errc{}) {
             throw std::invalid_argument("Invalid double: " + std::string(sv));
@@ -95,7 +97,7 @@ void tick::parse(const std::string_view line) {
     // Helper lambda to parse int
     auto parse_int = [](std::string_view sv) -> int {
         int value{};
-        auto result = std::from_chars(sv.data(),
+        auto result = charconv_compat::from_chars(sv.data(),
                                                   sv.data() + sv.size(), value);
         if (result.ec != std::errc{}) {
             throw std::invalid_argument("Invalid int: " + std::string(sv));

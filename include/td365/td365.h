@@ -7,8 +7,10 @@
 
 #pragma once
 
+#include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <td365/authenticator.h>
 #include <td365/rest_api.h>
@@ -42,6 +44,8 @@ class td365 {
 
     void subscribe(int quote_id);
     void unsubscribe(int quote_id);
+
+    event wait(std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
     std::vector<market_group> get_market_super_group();
     std::vector<market_group> get_market_group(int id);
