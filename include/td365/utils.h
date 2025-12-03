@@ -24,4 +24,7 @@ std::string now_utc();
 boost::urls::url check_proxy_url();
 
 std::string get_http_body(http_response const &res);
+
+boost::asio::ip::tcp::resolver::results_type td_resolve(std::string_view host,
+                                                        std::string_view port);
 } // namespace td365

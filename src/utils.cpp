@@ -98,4 +98,25 @@ std::string get_http_body(http_response const &res) {
     return body;
 }
 
+boost::asio::ip::tcp::resolver::results_type td_resolve(std::string_view host,
+                                                        std::string_view port) {
+    std::string h, p;
+
+    if (auto *env = std::getenv("PROXY")) {
+        try {
+            auto u = boost::urls::url{env};
+            h = std::string{u.host()};
+            p = u.has_port() ? u.port() : "8080";
+        } catch (const std::exception &e) {
+            throw fail("invalid PROXY environmental: {}", e.what());
+        }
+    } else {
+        h = host;
+        p = port;
+    }
+
+    boost::asio::io_context io_context;
+    boost::asio::ip::tcp::resolver resolver(io_context);
+    return resolver.resolve(h, p);
+}
 } // namespace td365

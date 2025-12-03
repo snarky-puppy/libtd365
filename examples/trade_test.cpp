@@ -179,7 +179,8 @@ struct strategy {
         });
 
         if (response.accepted) {
-            spdlog::info("Sell order submitted, order_id={}", response.order_id);
+            spdlog::info("Sell order submitted, order_id={}",
+                         response.order_id);
         } else {
             spdlog::error("Sell order rejected: {}", response.message);
         }
@@ -249,7 +250,8 @@ struct strategy {
                                              T,
                                              td365::trade_established_event>) {
                         on_trade_established(std::move(e.data));
-                    } else if constexpr (std::is_same_v<T, td365::error_event>) {
+                    } else if constexpr (std::is_same_v<T,
+                                                        td365::error_event>) {
                         spdlog::error("Error: {}", e.message);
                     } else if constexpr (std::is_same_v<
                                              T,
@@ -257,7 +259,7 @@ struct strategy {
                         spdlog::info("Connection closed");
                         should_exit = true;
                     } else if constexpr (std::is_same_v<T,
-                                                         td365::timeout_event>) {
+                                                        td365::timeout_event>) {
                         // Timeout - continue waiting
                     }
                 },

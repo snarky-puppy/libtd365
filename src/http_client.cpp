@@ -58,8 +58,7 @@ void http_client::ensure_connected() {
                  boost::asio::error::get_ssl_category()}};
         }
 
-        tcp::resolver resolver(io_context_);
-        auto const endpoints = resolver.resolve(host_, "443");
+        auto const endpoints = td_resolve(host_, "443");
         boost::asio::connect(beast::get_lowest_layer(stream_), endpoints);
 
         stream_.handshake(ssl::stream_base::client);

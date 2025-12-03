@@ -37,10 +37,7 @@ void ws::connect(boost::urls::url url) {
     // Determine if we should use SSL based on the URL scheme
     using_ssl_ = (url.scheme() == "wss" || url.scheme() == "https");
 
-    // Resolve synchronously
-    tcp::resolver resolver(io_context_);
-    auto const endpoints =
-        resolver.resolve(url.host(), (using_ssl_ ? "443" : "80"));
+    auto const endpoints = td_resolve(url.host(), (using_ssl_ ? "443" : "80"));
 
     if (using_ssl_) {
         // Create SSL WebSocket
