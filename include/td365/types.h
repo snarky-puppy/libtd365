@@ -123,6 +123,8 @@ struct trade_response {
 
 struct account_summary {
     std::string account_id;
+    // - PlatformID: 0 - Basic/Standard platform
+    // - PlatformID: 3 - Platform with Spread/CFD switching capability
     int platform_id;
     double account_valuation;
     std::string funded_percentage_string;

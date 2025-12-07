@@ -44,6 +44,7 @@ class rest_api : public std::enable_shared_from_this<rest_api> {
         -> std::vector<candle>;
     auto trade(const trade_request &request) -> trade_response;
     auto sim_trade(const trade_request &request) -> void;
+    auto update_client_session_id() -> void;
 
   private:
     std::unique_ptr<http_client> client_;

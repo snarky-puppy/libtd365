@@ -27,6 +27,16 @@ static constexpr auto MAX_DEPTH = 4;
 
 namespace td365 {
 namespace {
+
+boost::url fix_url(std::string s) {
+    size_t pos = 0;
+    while ((pos = s.find(' ', pos)) != std::string::npos) {
+        s.replace(pos, 1, "%20");
+        pos += 3; // advance past "%20"
+    }
+    return boost::urls::url{s};
+}
+
 std::string extract_ots(std::string_view s) {
     auto r = boost::urls::parse_origin_form(s);
     auto u = r.value();
@@ -92,8 +102,9 @@ auto rest_api::open_client(std::string_view target, int depth)
     std::string t(target);
 
     while (depth <= MAX_DEPTH) {
-        spdlog::info("Following link: {}", t);
-        auto response = client_->get(t);
+        auto u = fix_url(t);
+        spdlog::info("Following link: {}", u.buffer());
+        auto response = client_->get(u.encoded_target());
         if (response.result() == http::status::ok) {
             // extract the ots value here while we have the path
             // GET /Advanced.aspx?ots=WJFUMNFE
@@ -117,7 +128,7 @@ auto rest_api::open_client(std::string_view target, int depth)
 }
 
 auto rest_api::connect(boost::urls::url url) -> rest_api::auth_info {
-    client_ = std::make_unique<http_client>(url.host());
+    client_ = std::make_unique<http_client>(url);
     spdlog::info("Opening {}", url.buffer());
     auto [ots, login_id] = open_client(url.encoded_target());
     auto token = client_->jar().get(ots);
@@ -176,7 +187,7 @@ auto rest_api::backfill(int market_id, int /*quote_id*/, size_t sz,
     // spdlog::info("chart url: {}", chart_url.buffer());
 
     // FIXME
-    auto hc = http_client("charts.finsatechnology.com");
+    auto hc = http_client(boost::url{"https://charts.finsatechnology.com"});
     auto target = std::format("/data/minute/{}/mid?l={}", market_id, sz);
     auto response = hc.get(target);
     auto j = json::parse(get_http_body(response));
@@ -234,5 +245,9 @@ auto rest_api::sim_trade(const trade_request &request) -> void {
                  {"key", request.key}};
     make_post<trade_response>(client_.get(),
                               "/UTSAPI.asmx/RequestTradeSimulate", body.dump());
+}
+
+auto rest_api::update_client_session_id() -> void {
+    client_->post("/UTSAPI.asmx/UpdateClientSessionID", std::nullopt);
 }
 } // namespace td365

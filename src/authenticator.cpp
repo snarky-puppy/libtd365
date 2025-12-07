@@ -73,7 +73,7 @@ struct auth_token {
 };
 
 auth_token login(const std::string &username, const std::string &password) {
-    http_client cli(std::string{OAuthTokenHost});
+    http_client cli(boost::url{OAuthTokenHost});
     json body = {
         {"realm", "Username-Password-Authentication"},
         {"client_id", "eeXrVwSMXPZ4pJpwStuNyiUa7XxGZRX9"},
@@ -85,7 +85,8 @@ auth_token login(const std::string &username, const std::string &password) {
     const auto response =
         cli.post("/oauth/token", body.dump(), application_json_headers);
     verify(response.result() == boost::beast::http::status::ok,
-           "login failed with result {}", static_cast<int>(response.result()));
+           "login failed with result {}: {}",
+           static_cast<int>(response.result()), get_http_body(response));
 
     auto json_response = json::parse(get_http_body(response));
 
@@ -145,7 +146,7 @@ web_detail authenticate(std::string username, std::string password,
         token.save();
     }
 
-    http_client client(std::string{PortalSiteHost});
+    http_client client(boost::url{PortalSiteHost});
 
     client.default_headers().emplace(
         "Authorization", std::format("Bearer {}", token.access_token));
@@ -156,10 +157,7 @@ web_detail authenticate(std::string username, std::string password,
     details.account_type = account["accountType"] == "DEMO" ? demo : prod;
 
     std::string_view utmp = account["button"]["linkTo"].get<std::string_view>();
-    auto launch_url = boost::urls::parse_uri(utmp);
-    std::string_view target = launch_url.value().encoded_target();
-
-    details.platform_url = fetch_platform_url(client, target);
+    details.platform_url = fetch_platform_url(client, utmp);
 
     details.site_host =
         url{details.account_type == demo ? DemoSiteHost : ProdSiteHost};

@@ -115,6 +115,8 @@ boost::asio::ip::tcp::resolver::results_type td_resolve(std::string_view host,
         p = port;
     }
 
+    spdlog::info("resolving {}:{} ({}:{})", host, port, h, p);
+
     boost::asio::io_context io_context;
     boost::asio::ip::tcp::resolver resolver(io_context);
     return resolver.resolve(h, p);

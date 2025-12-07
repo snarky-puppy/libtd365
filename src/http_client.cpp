@@ -19,6 +19,46 @@
 #include <td365/utils.h>
 #include <td365/verify.h>
 
+template <class Body, class Fields>
+void log_request_debug(const boost::beast::http::request<Body, Fields> &req) {
+    spdlog::debug("----- HTTP Request -----");
+
+    // Method
+    spdlog::debug("{} {}", req.method_string(), req.target());
+
+    // Headers
+    for (const auto &h : req) {
+        spdlog::debug("  {}: {}", h.name_string(), h.value());
+    }
+
+    // Body
+    if constexpr (!std::is_same_v<Body, boost::beast::http::empty_body>) {
+        if constexpr (std::is_same_v<Body, boost::beast::http::string_body>) {
+            spdlog::debug("Body: {}", req.body());
+        } else {
+            spdlog::debug("Body: <{} bytes>", req.body().size());
+        }
+    } else {
+        spdlog::debug("Body: <empty>");
+    }
+
+    spdlog::debug("---------------------------------");
+}
+
+template <class Response> void log_response_debug(const Response &res) {
+    spdlog::debug("----- HTTP Response -----");
+
+    spdlog::debug("HTTP/1.1 {} {}", static_cast<unsigned>(res.result_int()),
+                  res.reason());
+    for (const auto &h : res) {
+        spdlog::debug("  {}: {}", h.name_string(), h.value());
+    }
+
+    spdlog::debug("Body: <{} bytes>", res.body().size());
+
+    spdlog::debug("----------------------------------");
+}
+
 namespace td365 {
 namespace net = boost::asio;
 namespace beast = boost::beast;
@@ -27,6 +67,9 @@ using tcp = net::ip::tcp;
 namespace ssl = boost::asio::ssl;
 
 constexpr auto const kBodySizeLimit = 128U * 1024U * 1024U; // 128 M
+
+// FIXME: move to private header
+extern bool is_debug_enabled();
 
 auto create_default_headers() {
     http_headers hdrs;
@@ -42,23 +85,27 @@ const http_headers no_headers{};
 const http_headers application_json_headers{
     {to_string(http::field::content_type), "application/json; charset=utf-8"}};
 
-http_client::http_client(std::string host)
-    : stream_(io_context_, ssl_ctx()), host_(std::move(host)),
-      jar_(host_ + ".cookies"), default_headers_(create_default_headers()) {
-    default_headers_.emplace(to_string(http::field::host), host_);
+http_client::http_client(boost::urls::url url)
+    : stream_(io_context_, ssl_ctx()), base_url_(std::move(url)),
+      jar_(base_url_.host() + ".cookies"),
+      default_headers_(create_default_headers()) {
+    default_headers_.emplace(to_string(http::field::host), base_url_.host());
 }
 
 void http_client::ensure_connected() {
     if (!stream_.lowest_layer().is_open()) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
-        if (!SSL_set_tlsext_host_name(stream_.native_handle(),
-                                      const_cast<char *>(host_.c_str()))) {
+        if (!SSL_set_tlsext_host_name(
+                stream_.native_handle(),
+                const_cast<char *>(base_url_.host().c_str()))) {
+            spdlog::error("Failed to set SNI Host \"{}\": {}", base_url_.host(),
+                          ::ERR_error_string(::ERR_get_error(), nullptr));
             throw boost::system::system_error{
                 {static_cast<int>(::ERR_get_error()),
                  boost::asio::error::get_ssl_category()}};
         }
 
-        auto const endpoints = td_resolve(host_, "443");
+        auto const endpoints = td_resolve(base_url_.host(), "443");
         boost::asio::connect(beast::get_lowest_layer(stream_), endpoints);
 
         stream_.handshake(ssl::stream_base::client);
@@ -94,6 +141,10 @@ http_response http_client::send(boost::beast::http::verb verb,
         req.set(http::field::content_length, "0");
     }
 
+    if (is_debug_enabled()) {
+        log_request_debug(req);
+    }
+
     try {
         http::write(stream_, req);
 
@@ -107,6 +158,10 @@ http_response http_client::send(boost::beast::http::verb verb,
         auto response = p.release();
 
         jar_.update(response);
+
+        if (is_debug_enabled()) {
+            log_response_debug(response);
+        }
 
         return response;
     } catch (const boost::beast::error_code &ec) {

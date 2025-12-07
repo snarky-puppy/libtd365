@@ -123,8 +123,25 @@ void ws_client::send(const nlohmann::json &body) { ws_->send(body.dump()); }
 
 event ws_client::read_and_process_message(
     std::optional<std::chrono::milliseconds> timeout) {
+    auto start_time = std::chrono::steady_clock::now();
+    auto deadline = timeout ? start_time + *timeout
+                            : std::chrono::steady_clock::time_point::max();
+
     while (true) {
-        auto [ec, buf] = ws_->read_message(timeout);
+        auto now = std::chrono::steady_clock::now();
+        auto remaining = deadline - now;
+
+        if (timeout && remaining <= std::chrono::milliseconds(0)) {
+            return timeout_event{};
+        }
+
+        auto read_timeout =
+            timeout ? std::optional(
+                          std::chrono::duration_cast<std::chrono::milliseconds>(
+                              remaining))
+                    : std::nullopt;
+
+        auto [ec, buf] = ws_->read_message(read_timeout);
         if (ec) {
             if (ec == boost::asio::error::operation_aborted ||
                 ec == boost::beast::error::timeout) {
@@ -259,9 +276,12 @@ ws_client::process_subscribe_response(const nlohmann::json &msg) {
 
 event ws_client::process_account_summary(const nlohmann::json &msg) {
     spdlog::info("account summary received: {}", msg.dump());
+    // - PlatformID: 0 - Basic/Standard platform
+    // - PlatformID: 3 - Platform with Spread/CFD switching capability
     if (msg.at("d").at("PlatformID").get<int>() == 0) {
         spdlog::info("account summary: skip platform 0:", msg.dump());
-        throw std::runtime_error("Skipping platform 0 account summary");
+        // throw std::runtime_error("Skipping platform 0 account summary");
+        return account_summary_event{};
     }
     auto summary = msg["d"].get<account_summary>();
     return account_summary_event{std::move(summary)};

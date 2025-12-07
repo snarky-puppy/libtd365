@@ -21,7 +21,7 @@ extern http_headers const no_headers;
 extern http_headers const application_json_headers;
 
 struct http_client {
-    http_client(std::string host);
+    http_client(boost::urls::url url);
 
     virtual ~http_client() = default;
 
@@ -58,7 +58,7 @@ struct http_client {
     using stream_t = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
     stream_t stream_;
 
-    const std::string host_;
+    const boost::urls::url base_url_;
     cookiejar jar_;
     http_headers default_headers_;
 };

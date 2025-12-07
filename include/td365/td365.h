@@ -56,5 +56,6 @@ class td365 {
   private:
     rest_api rest_client_;
     ws_client ws_client_;
+    std::chrono::steady_clock::time_point last_session_update_;
 };
 } // namespace td365

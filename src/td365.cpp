@@ -37,7 +37,29 @@ void td365::subscribe(int quote_id) { ws_client_.subscribe(quote_id); }
 void td365::unsubscribe(int quote_id) { ws_client_.unsubscribe(quote_id); }
 
 event td365::wait(std::optional<std::chrono::milliseconds> timeout) {
-    return ws_client_.read_and_process_message(timeout);
+    auto start_time = std::chrono::steady_clock::now();
+    auto deadline = timeout ? start_time + *timeout
+                            : std::chrono::steady_clock::time_point::max();
+
+    while (true) {
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - last_session_update_ >= std::chrono::seconds(60)) {
+            rest_client_.update_client_session_id();
+            last_session_update_ = now;
+        }
+
+        auto evt =
+            ws_client_.read_and_process_message(std::chrono::milliseconds(100));
+
+        if (!std::holds_alternative<timeout_event>(evt)) {
+            return evt;
+        }
+
+        if (timeout && std::chrono::steady_clock::now() >= deadline) {
+            return timeout_event{};
+        }
+    }
 }
 
 std::vector<market_group> td365::get_market_super_group() {
